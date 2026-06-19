@@ -569,6 +569,31 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s).replace(/`/g, "&#96;"); }
 
+// ---------- MODAL CLOSE HANDLERS ----------
+// X buttons (data-close="modalId")
+document.querySelectorAll(".modal-close").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const id = btn.dataset.close;
+    if (id) document.getElementById(id).hidden = true;
+  });
+});
+
+// Click on backdrop (outside .modal-body) closes the modal
+document.querySelectorAll(".modal").forEach(modal => {
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.hidden = true;
+  });
+});
+
+// Escape key closes any open modal
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    document.querySelectorAll(".modal").forEach(m => { m.hidden = true; });
+  }
+});
+
 // ---------- INIT ----------
 load();
+// Defensive: ensure modals are hidden on first paint regardless of any CSS quirks
+document.querySelectorAll(".modal").forEach(m => { m.hidden = true; });
 switchTab(state.activeTab || "clients");

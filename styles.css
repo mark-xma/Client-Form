@@ -279,16 +279,28 @@ textarea { resize: vertical; min-height: 60px; }
   background: rgba(15, 23, 42, 0.5);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
+  padding: 20px;
 }
+.modal[hidden] { display: none !important; }
 .modal-body {
   background: var(--surface); padding: 24px;
   border-radius: var(--radius);
   width: 100%; max-width: 420px;
   box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; gap: 12px;
+  max-height: 90vh; overflow-y: auto;
+  position: relative;
 }
 .modal-body.wide { max-width: 640px; }
 .modal-body h2 { margin-bottom: 4px; }
+.modal-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; line-height: 1; color: var(--text-muted);
+  cursor: pointer; border-radius: 6px;
+}
+.modal-close:hover { background: var(--surface-2); color: var(--text); }
 
 /* ---------- print ---------- */
 @media print {

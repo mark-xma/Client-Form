@@ -3,544 +3,146 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>XMA Client System</title>
+<title>XMA Shoot Pack — Client Onboarding</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">
+  <div class="brand" id="brandHome">
     <div class="logo-mark">XMA</div>
     <div>
-      <div class="brand-title">Client &amp; Team System</div>
-      <div class="brand-sub">From sale → delivery → satisfaction</div>
+      <div class="brand-title">Shoot Pack</div>
+      <div class="brand-sub">Client onboarding system</div>
     </div>
   </div>
-  <div class="topbar-actions">
-    <button id="exportAllBtn" class="btn btn-ghost">Export all (JSON)</button>
-    <button id="importBtn" class="btn btn-ghost">Import</button>
-    <input type="file" id="importFile" accept="application/json" hidden />
-    <button id="printBtn" class="btn btn-ghost">Print</button>
-  </div>
+  <nav class="topnav">
+    <button class="navlink" data-screen="welcome">New brief</button>
+    <button class="navlink" data-screen="list">Saved briefs <span class="badge" id="briefCount">0</span></button>
+  </nav>
 </header>
-
-<nav class="tabs" id="tabs">
-  <button class="tab active" data-tab="clients">Clients</button>
-  <button class="tab" data-tab="intake">1 — Sales Intake</button>
-  <button class="tab" data-tab="scope-lock">2 — Ops Sign-Off</button>
-  <button class="tab" data-tab="discovery">3 — Discovery</button>
-  <button class="tab" data-tab="delivery">4 — Delivery Tracker</button>
-  <button class="tab" data-tab="satisfaction">5 — Satisfaction</button>
-  <button class="tab" data-tab="faults">Team Faults</button>
-</nav>
 
 <main id="main">
 
-  <!-- ===================== CLIENTS DASHBOARD ===================== -->
-  <section class="view" id="view-clients">
-    <div class="view-header">
-      <h1>Clients</h1>
+  <!-- ================ WELCOME / CATEGORY PICKER ================ -->
+  <section class="screen" id="screen-welcome">
+    <div class="welcome">
+      <h1>Welcome to your shoot brief</h1>
+      <p class="lead">
+        We'll walk through every decision needed to film your videos — from look &amp; feel to the exact
+        size of every product. Takes about <b>10–15 minutes</b>. You can save and come back any time.
+      </p>
+      <p class="muted">
+        <b>The one principle:</b> if it appears on screen, it was chosen on purpose — never guessed.
+        Every section is a decision to confirm. By the end, our creative team gets a single, unambiguous brief.
+      </p>
+
+      <h2 style="margin-top: 28px;">Pick the category for this shoot</h2>
+      <div class="category-grid" id="categoryGrid"></div>
+
+      <div class="resume-strip" id="resumeStrip" hidden>
+        <div>
+          <b>Resume your in-progress brief?</b>
+          <div class="muted" id="resumeMeta"></div>
+        </div>
+        <div>
+          <button class="btn btn-ghost" id="resumeDiscard">Start fresh</button>
+          <button class="btn btn-primary" id="resumeContinue">Continue</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================ WIZARD ================ -->
+  <section class="screen" id="screen-wizard" hidden>
+    <div class="wizard-head">
+      <div class="wizard-meta">
+        <span class="pill pill-info" id="wizardCategory">—</span>
+        <span class="muted" id="wizardStepLabel">Step 1 of 12</span>
+      </div>
+      <div class="wizard-actions">
+        <button class="btn btn-ghost btn-sm" id="wizardSaveExit">Save &amp; exit</button>
+      </div>
+    </div>
+
+    <div class="progressbar"><div class="progressbar-fill" id="progressFill"></div></div>
+
+    <div class="wizard-content" id="wizardContent">
+      <!-- step content rendered here -->
+    </div>
+
+    <div class="wizard-nav">
+      <button class="btn btn-ghost" id="wizardBack">← Back</button>
+      <div class="muted" id="autosaveNote">Autosaved</div>
+      <button class="btn btn-primary" id="wizardNext">Next →</button>
+    </div>
+  </section>
+
+  <!-- ================ SUBMIT CONFIRMATION ================ -->
+  <section class="screen" id="screen-submitted" hidden>
+    <div class="submitted">
+      <div class="big-check">✓</div>
+      <h1>Brief submitted</h1>
+      <p class="lead">
+        Your shoot brief has been saved. Send the printable copy to XMA so we can lock the production schedule.
+      </p>
+      <div class="submitted-actions">
+        <button class="btn btn-primary" id="viewBriefBtn">View / print brief</button>
+        <button class="btn btn-ghost" id="downloadBriefBtn">Download as JSON</button>
+        <button class="btn btn-ghost" id="emailBriefBtn">Email brief to XMA</button>
+      </div>
+      <div class="muted" style="margin-top: 20px;">
+        You can find this brief later under <b>Saved briefs</b> in the top menu.
+      </div>
+    </div>
+  </section>
+
+  <!-- ================ BRIEF VIEW (printable) ================ -->
+  <section class="screen" id="screen-brief" hidden>
+    <div class="brief-toolbar no-print">
+      <button class="btn btn-ghost" id="briefBack">← Back to saved briefs</button>
       <div>
-        <button class="btn btn-primary" id="newClientBtn">+ New client</button>
+        <button class="btn btn-ghost" id="briefDownload">Download JSON</button>
+        <button class="btn btn-primary" id="briefPrint">Print / Save as PDF</button>
       </div>
     </div>
-
-    <div class="callout">
-      <strong>How this system prevents the #1 fault (sales over-promising what ops can deliver):</strong>
-      Every new client must move <b>Sales Intake → Ops Sign-Off</b> before scope locks. Ops marks each deliverable
-      as <span class="pill pill-ok">Feasible</span>, <span class="pill pill-warn">Risky</span>, or
-      <span class="pill pill-bad">Not as sold</span>. A scope cannot proceed to delivery until <b>zero red items</b>.
-    </div>
-
-    <div class="grid" id="clientList"></div>
-    <div id="clientEmpty" class="empty">No clients yet. Click <b>+ New client</b> to begin.</div>
+    <div id="briefContent" class="brief-content"><!-- rendered --></div>
   </section>
 
-  <!-- ===================== SALES INTAKE ===================== -->
-  <section class="view" id="view-intake" hidden>
+  <!-- ================ SAVED BRIEFS LIST ================ -->
+  <section class="screen" id="screen-list" hidden>
     <div class="view-header">
-      <h1>Sales Intake</h1>
-      <div class="muted" id="intakeClientLabel">Select a client →</div>
-    </div>
-
-    <div class="card">
-      <h2>Client &amp; deal basics</h2>
-      <div class="row">
-        <label>Client / Brand name <input data-field="intake.clientName" /></label>
-        <label>Company / legal name <input data-field="intake.companyName" /></label>
-      </div>
-      <div class="row">
-        <label>Main contact <input data-field="intake.contactName" /></label>
-        <label>Phone <input data-field="intake.contactPhone" /></label>
-        <label>Email <input data-field="intake.contactEmail" type="email" /></label>
-      </div>
-      <div class="row">
-        <label>Lead source
-          <select data-field="intake.source">
-            <option value="">—</option>
-            <option>Referral</option>
-            <option>Instagram</option>
-            <option>TikTok</option>
-            <option>Cold outreach</option>
-            <option>Inbound (website)</option>
-            <option>Event / networking</option>
-            <option>Other</option>
-          </select>
-        </label>
-        <label>Sales rep <input data-field="intake.salesRep" /></label>
-        <label>Deal close date <input data-field="intake.closeDate" type="date" /></label>
-      </div>
-      <div class="row">
-        <label>Total deal value (USD) <input data-field="intake.dealValue" type="number" min="0" step="100" /></label>
-        <label>Engagement type
-          <select data-field="intake.engagementType">
-            <option value="">—</option>
-            <option>One-time project</option>
-            <option>Monthly retainer</option>
-            <option>3-month retainer</option>
-            <option>6-month retainer</option>
-            <option>Annual retainer</option>
-          </select>
-        </label>
-        <label>Payment terms
-          <select data-field="intake.paymentTerms">
-            <option value="">—</option>
-            <option>100% upfront</option>
-            <option>50/50</option>
-            <option>Monthly</option>
-            <option>Net 15</option>
-            <option>Net 30</option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Services sold</h2>
-      <p class="muted">Tick every service this client is paying for. The form expands so sales must specify exact deliverables — no vague promises.</p>
-      <div id="serviceSelectors" class="service-grid"></div>
-    </div>
-
-    <div id="serviceForms"></div>
-
-    <div class="card">
-      <h2>What sales <u>verbally</u> promised (be honest)</h2>
-      <p class="muted">List anything said in calls / DMs / meetings that isn't yet captured above. This is where most "over-promising" hides. Ops will check every line.</p>
-      <textarea data-field="intake.verbalPromises" rows="4" placeholder="e.g. 'We'll throw in 2 extra reels if you sign today'..."></textarea>
-    </div>
-
-    <div class="card">
-      <h2>Client expectations in their own words</h2>
-      <div class="row">
-        <label>Why did they buy? What problem are they solving?
-          <textarea data-field="intake.whyBought" rows="3"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>What does "success" look like to them in 30 / 60 / 90 days?
-          <textarea data-field="intake.successDef" rows="3"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" id="saveIntakeBtn">Save &amp; send to Ops</button>
-    </div>
-  </section>
-
-  <!-- ===================== OPS SCOPE LOCK ===================== -->
-  <section class="view" id="view-scope-lock" hidden>
-    <div class="view-header">
-      <h1>Ops Sign-Off / Scope Lock</h1>
-      <div class="muted" id="scopeClientLabel">Select a client →</div>
-    </div>
-
-    <div class="callout callout-warn">
-      <b>Ops gate.</b> For every deliverable sales sold, ops must mark feasibility and timeline. Any <span class="pill pill-bad">Not as sold</span>
-      item blocks scope lock until renegotiated with the client. This is the fault-prevention checkpoint.
-    </div>
-
-    <div class="card">
-      <h2>Ops review</h2>
-      <div class="row">
-        <label>Ops reviewer name <input data-field="scopeLock.reviewer" /></label>
-        <label>Review date <input data-field="scopeLock.reviewDate" type="date" /></label>
-        <label>Team capacity at review
-          <select data-field="scopeLock.capacity">
-            <option value="">—</option>
-            <option>Plenty of room</option>
-            <option>Tight but doable</option>
-            <option>Already over-stretched</option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <div id="scopeReviewList"></div>
-
-    <div class="card">
-      <h2>Sales verbal promises — ops verdict</h2>
-      <p class="muted">Sales typed these in. Mark each as approved, adjusted, or struck out before signing.</p>
-      <textarea data-field="scopeLock.verbalVerdict" rows="4" placeholder="Line by line ops decision on verbal promises..."></textarea>
-    </div>
-
-    <div class="card">
-      <h2>Final locked scope summary</h2>
-      <textarea data-field="scopeLock.lockedSummary" rows="5" placeholder="In plain English, what we are now committing to deliver. This is the document the client signs."></textarea>
-      <div class="row">
-        <label>Locked timeline (start → end) <input data-field="scopeLock.timeline" placeholder="e.g. 2026-07-01 → 2026-09-30" /></label>
-        <label>Number of revision rounds total <input data-field="scopeLock.revisions" type="number" min="0" /></label>
-      </div>
-      <div class="row signoffs">
-        <label class="sign"><input type="checkbox" data-field="scopeLock.signOps" /> Ops signed</label>
-        <label class="sign"><input type="checkbox" data-field="scopeLock.signSales" /> Sales signed</label>
-        <label class="sign"><input type="checkbox" data-field="scopeLock.signClient" /> Client signed</label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" id="saveScopeBtn">Save scope lock</button>
-    </div>
-  </section>
-
-  <!-- ===================== DISCOVERY ===================== -->
-  <section class="view" id="view-discovery" hidden>
-    <div class="view-header">
-      <h1>Discovery</h1>
-      <div class="muted" id="discoveryClientLabel">Select a client →</div>
-    </div>
-
-    <div class="card">
-      <h2>Their business</h2>
-      <div class="row">
-        <label>What does the business actually do? (one sentence)
-          <textarea data-field="discovery.businessDesc" rows="2"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>Target customer (age, income, location, behavior)
-          <textarea data-field="discovery.targetCustomer" rows="3"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>Top 3 competitors <input data-field="discovery.competitors" /></label>
-        <label>Their unique advantage <input data-field="discovery.usp" /></label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Brand &amp; assets</h2>
-      <div class="row">
-        <label>Existing brand guide? <select data-field="discovery.hasBrandGuide"><option>No</option><option>Yes</option><option>Partial</option></select></label>
-        <label>Brand colors (hex) <input data-field="discovery.brandColors" placeholder="#000, #fff" /></label>
-        <label>Brand fonts <input data-field="discovery.brandFonts" /></label>
-      </div>
-      <div class="row">
-        <label>Voice / tone (3 adjectives) <input data-field="discovery.tone" placeholder="bold, witty, premium" /></label>
-        <label>Inspiration links (Instagram / Pinterest / sites)
-          <textarea data-field="discovery.inspiration" rows="2"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>Hard NOs — what the client never wants to see
-          <textarea data-field="discovery.donts" rows="2"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>People &amp; process</h2>
-      <div class="row">
-        <label>Final decision maker (name + role) <input data-field="discovery.decisionMaker" /></label>
-        <label>Other stakeholders who approve <input data-field="discovery.stakeholders" /></label>
-      </div>
-      <div class="row">
-        <label>Preferred communication channel
-          <select data-field="discovery.commChannel">
-            <option value="">—</option>
-            <option>WhatsApp</option>
-            <option>Email</option>
-            <option>Slack</option>
-            <option>Phone</option>
-          </select>
-        </label>
-        <label>Update cadence
-          <select data-field="discovery.cadence">
-            <option value="">—</option>
-            <option>Daily</option>
-            <option>Twice weekly</option>
-            <option>Weekly</option>
-            <option>Bi-weekly</option>
-            <option>Monthly</option>
-          </select>
-        </label>
-        <label>Response time expectation
-          <select data-field="discovery.responseSla">
-            <option value="">—</option>
-            <option>&lt; 2 hrs</option>
-            <option>Same day</option>
-            <option>24 hrs</option>
-            <option>48 hrs</option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Success metrics (the numbers we'll be judged on)</h2>
-      <div class="row">
-        <label>Primary KPI <input data-field="discovery.kpi1" placeholder="e.g. CAC < $40" /></label>
-        <label>Secondary KPI <input data-field="discovery.kpi2" /></label>
-        <label>Reporting frequency
-          <select data-field="discovery.reportFreq">
-            <option value="">—</option>
-            <option>Weekly</option>
-            <option>Bi-weekly</option>
-            <option>Monthly</option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" id="saveDiscoveryBtn">Save discovery</button>
-    </div>
-  </section>
-
-  <!-- ===================== DELIVERY TRACKER ===================== -->
-  <section class="view" id="view-delivery" hidden>
-    <div class="view-header">
-      <h1>Delivery Tracker</h1>
-      <div class="muted" id="deliveryClientLabel">Select a client →</div>
-    </div>
-
-    <div class="callout">
-      Every deliverable promised at scope-lock is listed below. Mark status weekly. Any deviation from promise gets a reason and a fix — surfaces over-promising in real time, before the client complains.
-    </div>
-
-    <div id="deliveryItems"></div>
-
-    <div class="card">
-      <h2>Open issues this week</h2>
-      <textarea data-field="delivery.weeklyIssues" rows="4" placeholder="Capacity issue? Client unresponsive? Vendor delay? Document here so the next check-in is informed."></textarea>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" id="saveDeliveryBtn">Save delivery state</button>
-    </div>
-  </section>
-
-  <!-- ===================== SATISFACTION ===================== -->
-  <section class="view" id="view-satisfaction" hidden>
-    <div class="view-header">
-      <h1>Client Satisfaction</h1>
-      <div class="muted" id="satisfactionClientLabel">Select a client →</div>
-    </div>
-
-    <div class="callout">
-      Three mandatory check-ins. <b>Don't wait until the end to find out they're unhappy.</b>
-    </div>
-
-    <div class="card">
-      <h2>Stage 1 — Onboarding (within first 14 days)</h2>
-      <div class="row">
-        <label>Date <input data-field="satisfaction.s1Date" type="date" /></label>
-        <label>NPS (0–10) <input data-field="satisfaction.s1Nps" type="number" min="0" max="10" /></label>
-      </div>
-      <div class="row">
-        <label>What's working so far?
-          <textarea data-field="satisfaction.s1Working" rows="2"></textarea>
-        </label>
-        <label>What's confusing or frustrating?
-          <textarea data-field="satisfaction.s1Frustrating" rows="2"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>Action items
-          <textarea data-field="satisfaction.s1Actions" rows="2"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Stage 2 — Midpoint</h2>
-      <div class="row">
-        <label>Date <input data-field="satisfaction.s2Date" type="date" /></label>
-        <label>NPS (0–10) <input data-field="satisfaction.s2Nps" type="number" min="0" max="10" /></label>
-      </div>
-      <div class="row">
-        <label>Are we hitting the success criteria from intake?
-          <textarea data-field="satisfaction.s2Hitting" rows="2"></textarea>
-        </label>
-        <label>Gap between expectation and reality?
-          <textarea data-field="satisfaction.s2Gap" rows="2"></textarea>
-        </label>
-      </div>
-      <div class="row">
-        <label>Action items
-          <textarea data-field="satisfaction.s2Actions" rows="2"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Stage 3 — Closeout / renewal moment</h2>
-      <div class="row">
-        <label>Date <input data-field="satisfaction.s3Date" type="date" /></label>
-        <label>Final NPS (0–10) <input data-field="satisfaction.s3Nps" type="number" min="0" max="10" /></label>
-      </div>
-      <div class="row">
-        <label>Would they renew / refer?
-          <select data-field="satisfaction.s3Renew">
-            <option value="">—</option>
-            <option>Yes — renewing now</option>
-            <option>Yes — referring</option>
-            <option>Maybe</option>
-            <option>No</option>
-          </select>
-        </label>
-        <label>Testimonial captured? <select data-field="satisfaction.s3Testimonial"><option>No</option><option>Yes — written</option><option>Yes — video</option></select></label>
-      </div>
-      <div class="row">
-        <label>What did we do that they loved?
-          <textarea data-field="satisfaction.s3Loved" rows="2"></textarea>
-        </label>
-        <label>What would they want different next time?
-          <textarea data-field="satisfaction.s3Different" rows="2"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-primary" id="saveSatisfactionBtn">Save satisfaction</button>
-    </div>
-  </section>
-
-  <!-- ===================== TEAM FAULTS ===================== -->
-  <section class="view" id="view-faults" hidden>
-    <div class="view-header">
-      <h1>Team Fault Log</h1>
+      <h1>Saved briefs</h1>
       <div>
-        <button class="btn btn-primary" id="newFaultBtn">+ Log a fault</button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+        <button class="btn btn-ghost" id="importBriefBtn">Import brief</button>
+        <button class="btn btn-primary" id="newBriefBtn">+ New brief</button>
       </div>
     </div>
-
     <div class="callout">
-      Internal mistakes only. Each fault gets a category, owner, root cause, and a <b>"what we'll do differently next time"</b>. Patterns emerge after 10–15 entries.
+      <b>Briefs are saved on this device only.</b> To share with someone else, open the brief and use
+      <b>Download JSON</b> — they can <b>Import brief</b> here to load it.
     </div>
-
-    <div class="row filter-row">
-      <label>Filter by category
-        <select id="faultFilterCat">
-          <option value="">All</option>
-          <option>Sales over-promise</option>
-          <option>Handoff lost info</option>
-          <option>Capacity / overload</option>
-          <option>Skill gap</option>
-          <option>Miscommunication with client</option>
-          <option>Missed deadline</option>
-          <option>Quality issue</option>
-          <option>Tooling / process</option>
-          <option>Other</option>
-        </select>
-      </label>
-      <label>Filter by status
-        <select id="faultFilterStatus">
-          <option value="">All</option>
-          <option>Open</option>
-          <option>In progress</option>
-          <option>Resolved</option>
-        </select>
-      </label>
-    </div>
-
-    <div id="faultList" class="grid"></div>
-    <div id="faultEmpty" class="empty">No faults logged. Click <b>+ Log a fault</b> to add one.</div>
+    <div class="grid" id="briefList"></div>
+    <div class="empty" id="briefEmpty">No briefs yet. Click <b>+ New brief</b> to start.</div>
   </section>
 
 </main>
 
-<!-- ===================== NEW CLIENT MODAL ===================== -->
-<div class="modal" id="newClientModal" hidden>
+<!-- delete confirm modal -->
+<div class="modal" id="confirmModal" hidden>
   <div class="modal-body">
-    <button type="button" class="modal-close" data-close="newClientModal" aria-label="Close">×</button>
-    <h2>New client</h2>
-    <label>Client / brand name <input id="newClientName" autofocus /></label>
-    <label>Sales rep <input id="newClientRep" /></label>
+    <button type="button" class="modal-close" data-close="confirmModal" aria-label="Close">×</button>
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmBody" class="muted"></p>
     <div class="actions">
-      <button class="btn btn-ghost" id="cancelClientBtn">Cancel</button>
-      <button class="btn btn-primary" id="createClientBtn">Create</button>
+      <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk">Delete</button>
     </div>
   </div>
 </div>
 
-<!-- ===================== NEW FAULT MODAL ===================== -->
-<div class="modal" id="newFaultModal" hidden>
-  <div class="modal-body wide">
-    <button type="button" class="modal-close" data-close="newFaultModal" aria-label="Close">×</button>
-    <h2 id="faultModalTitle">Log a fault</h2>
-    <input type="hidden" id="faultEditId" />
-    <div class="row">
-      <label>Title <input id="faultTitle" placeholder="e.g. Reel deliverable mismatch with client" /></label>
-      <label>Date <input id="faultDate" type="date" /></label>
-    </div>
-    <div class="row">
-      <label>Category
-        <select id="faultCategory">
-          <option>Sales over-promise</option>
-          <option>Handoff lost info</option>
-          <option>Capacity / overload</option>
-          <option>Skill gap</option>
-          <option>Miscommunication with client</option>
-          <option>Missed deadline</option>
-          <option>Quality issue</option>
-          <option>Tooling / process</option>
-          <option>Other</option>
-        </select>
-      </label>
-      <label>Severity
-        <select id="faultSeverity">
-          <option>Low (annoying)</option>
-          <option>Medium (client noticed)</option>
-          <option>High (client upset)</option>
-          <option>Critical (lost client / refund)</option>
-        </select>
-      </label>
-      <label>Status
-        <select id="faultStatus">
-          <option>Open</option>
-          <option>In progress</option>
-          <option>Resolved</option>
-        </select>
-      </label>
-    </div>
-    <div class="row">
-      <label>Owner (team member responsible for fixing) <input id="faultOwner" /></label>
-      <label>Linked client (optional)
-        <select id="faultClientLink"><option value="">—</option></select>
-      </label>
-    </div>
-    <label>What happened?
-      <textarea id="faultWhat" rows="3"></textarea>
-    </label>
-    <label>Root cause (the real "why", not the surface)
-      <textarea id="faultRoot" rows="3"></textarea>
-    </label>
-    <label>How we resolved it (or plan to)
-      <textarea id="faultFix" rows="3"></textarea>
-    </label>
-    <label>What we'll do differently next time (process change)
-      <textarea id="faultLesson" rows="3"></textarea>
-    </label>
-    <div class="actions">
-      <button class="btn btn-ghost" id="cancelFaultBtn">Cancel</button>
-      <button class="btn btn-danger" id="deleteFaultBtn" hidden>Delete</button>
-      <button class="btn btn-primary" id="saveFaultBtn">Save fault</button>
-    </div>
-  </div>
-</div>
-
-<script src="services.js"></script>
+<script src="packs.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

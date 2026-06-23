@@ -45,22 +45,21 @@ function flashAutosave() {
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
 // ---------- WIZARD STEP DEFINITIONS ----------
-// Each step describes: which SHARED section (or product) to render. Functions below render them.
+// Format / Creative / Product are PER-VIDEO. The other shared sections (model, setting,
+// motion/audio, text/branding) stay batch-wide since they're usually consistent.
 const WIZARD_STEPS = [
   { id: "identity",       title: "Project identity",    render: ctx => renderFieldSection(ctx, ctx.pack.shared.identity) },
-  { id: "format",         title: "Format & technical",  render: ctx => renderFieldSection(ctx, ctx.pack.shared.format) },
-  { id: "creative",       title: "Creative direction",  render: ctx => renderFieldSection(ctx, ctx.pack.shared.creative) },
-  { id: "product",        title: "Your product",        render: ctx => renderFieldSection(ctx, ctx.pack.product) },
+  { id: "format",         title: "Format — per video",  render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.format) },
+  { id: "creative",       title: "Creative — per video",render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.creative) },
+  { id: "product",        title: "Product — per video", render: renderProductPerVideo },
   { id: "modelModesty",   title: "Model — modesty & cultural", render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelModesty) },
   { id: "modelAppearance",title: "Model — appearance",  render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelAppearance) },
   { id: "modelOther",     title: "Model — other",       render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelOther) },
   { id: "setting",        title: "Setting, lighting, palette", render: ctx => renderFieldSection(ctx, ctx.pack.shared.setting) },
   { id: "motionAudio",    title: "Motion, camera & audio", render: ctx => renderFieldSection(ctx, ctx.pack.shared.motionAudio) },
   { id: "textBranding",   title: "On-screen text & branding", render: ctx => renderFieldSection(ctx, ctx.pack.shared.textBranding) },
-  { id: "sizing",         title: "Sizing per item",     render: renderSizing },
-  { id: "assets",         title: "Assets to send us",   render: renderAssets },
-  { id: "videoMap",       title: "Per-video product map", render: renderVideoMap },
-  { id: "preflight",      title: "Pre-flight checklist & submit", render: renderPreflight },
+  { id: "assets",         title: "Universal assets",    render: renderAssets },
+  { id: "preflight",      title: "Pre-flight & submit", render: renderPreflight },
 ];
 
 // ---------- SCREEN ROUTING ----------
@@ -291,38 +290,138 @@ function validateStep(step, pack) {
   return missing;
 }
 
-// ---------- SIZING STEP ----------
-function renderSizing(ctx, _root) {
+// ---------- PER-VIDEO RENDERER ----------
+// Generic: turns a SHARED section into N video accordion blocks.
+function renderPerVideoSection(ctx, section) {
   const root = document.getElementById("wizardContent");
-  const pack = ctx.pack;
-  state.current.data.sizing = state.current.data.sizing || {};
-  const data = state.current.data.sizing;
+  const stepId = WIZARD_STEPS[state.step].id;
+  ctx.brief.data[stepId] = ctx.brief.data[stepId] || { videos: [] };
+  const target = Math.max(1, Number(ctx.brief.data.identity?.videoCount) || 1);
+  const videos = ctx.brief.data[stepId].videos;
+  while (videos.length < target) videos.push({});
+  while (videos.length > target && videos.length > 1) videos.pop();
 
   root.innerHTML = `
-    <h2>Sizing per item</h2>
-    <p class="step-intro">
-      Capture exact sizes for every item that appears on screen. Wrong scale (a 30ml bottle looking like a 100ml,
-      a ring rendered oversized) is a top cause of reshoots. Skip rows that don't apply.
+    <h2>${escapeHtml(section.title)}</h2>
+    <p class="step-intro">${escapeHtml(section.intro || "")}</p>
+    <p class="muted" style="margin-bottom: 12px;">
+      One block per video. Use <b>Copy first → all</b> if every video shares the same answers.
     </p>
-    <table class="video-table">
-      <thead><tr>
-        <th>Item</th><th>Measure</th><th>Your value (units)</th>
-      </tr></thead>
-      <tbody id="sizingBody"></tbody>
-    </table>
+    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first video → all</button>
+      <button class="btn btn-ghost btn-sm" id="expandAllBlocks">Expand all</button>
+      <button class="btn btn-ghost btn-sm" id="collapseAllBlocks">Collapse all</button>
+    </div>
+    <div id="perVideoContainer"></div>
   `;
-  const body = root.querySelector("#sizingBody");
-  pack.sizingRows.forEach((row, idx) => {
-    const tr = document.createElement("tr");
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.placeholder = row.units;
-    inp.value = data[row.item] ?? "";
-    inp.addEventListener("input", () => { data[row.item] = inp.value; save(); });
-    tr.innerHTML = `<td><b>${escapeHtml(row.item)}</b></td><td>${escapeHtml(row.measure)}</td><td></td>`;
-    tr.lastElementChild.appendChild(inp);
-    body.appendChild(tr);
+  drawVideoBlocks(root, section, videos);
+
+  root.querySelector("#copyFirstAll").addEventListener("click", () => {
+    if (!videos[0]) return;
+    if (!confirm(`Copy Video 1's answers to all ${videos.length} videos? This overwrites any existing answers in videos 2+.`)) return;
+    for (let i = 1; i < videos.length; i++) videos[i] = JSON.parse(JSON.stringify(videos[0]));
+    save(); drawVideoBlocks(root, section, videos);
   });
+  root.querySelector("#expandAllBlocks").addEventListener("click", () =>
+    root.querySelectorAll("details.video-block").forEach(d => d.open = true));
+  root.querySelector("#collapseAllBlocks").addEventListener("click", () =>
+    root.querySelectorAll("details.video-block").forEach(d => d.open = false));
+}
+
+function drawVideoBlocks(root, section, videos, extraRenderer) {
+  const container = root.querySelector("#perVideoContainer");
+  container.innerHTML = "";
+  videos.forEach((vid, i) => {
+    const block = document.createElement("details");
+    block.className = "video-block";
+    block.open = i === 0;
+    block.innerHTML = `<summary><span class="vb-num">${i + 1}</span> Video ${i + 1}</summary><div class="vb-body"></div>`;
+    const body = block.querySelector(".vb-body");
+    section.fields.forEach(f => body.appendChild(renderField(f, vid)));
+    if (extraRenderer) extraRenderer(vid, body, i);
+    container.appendChild(block);
+  });
+}
+
+// ---------- PRODUCT — PER VIDEO (incl. measurements + 10-photo requirement) ----------
+function renderProductPerVideo(ctx) {
+  const root = document.getElementById("wizardContent");
+  const pack = ctx.pack;
+  state.current.data.product = state.current.data.product || { videos: [] };
+  const target = Math.max(1, Number(state.current.data.identity?.videoCount) || 1);
+  const videos = state.current.data.product.videos;
+  while (videos.length < target) videos.push({});
+  while (videos.length > target && videos.length > 1) videos.pop();
+
+  const measurementHint = pack.sizingRows.map(r => `<b>${escapeHtml(r.item)}</b> (${escapeHtml(r.units)})`).join(" · ");
+
+  root.innerHTML = `
+    <h2>${escapeHtml(pack.product.title)} — per video</h2>
+    <p class="step-intro">${escapeHtml(pack.product.intro)}</p>
+    <div class="callout callout-warn">
+      <b>What we need for every product:</b><br/>
+      1) Exact measurements (so AI doesn't render the wrong scale)<br/>
+      2) <b>At least 10 reference photos</b> with a <b>known object next to it</b> for scale —
+         a coin, a ruler, a finger, a credit card. This is how we know the real-life size.
+    </div>
+    <p class="muted" style="font-size: 12px; margin-bottom: 14px;">
+      <b>What to measure for ${escapeHtml(pack.label)}:</b> ${measurementHint}
+    </p>
+    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first video → all</button>
+      <button class="btn btn-ghost btn-sm" id="expandAllBlocks">Expand all</button>
+      <button class="btn btn-ghost btn-sm" id="collapseAllBlocks">Collapse all</button>
+    </div>
+    <div id="perVideoContainer"></div>
+  `;
+
+  drawVideoBlocks(root, pack.product, videos, (vid, body, idx) => {
+    // append per-video extras: measurements, photos folder, photo confirmation
+    const extras = document.createElement("div");
+    extras.className = "per-video-extras";
+    extras.innerHTML = `
+      <div class="field">
+        <label class="field-label">Measurements for this product <span class="req">*</span></label>
+        <textarea rows="2" class="vid-measurements" placeholder="e.g. Ring band 3mm wide, US size 6.5, diamond 0.5ct, 5mm round"></textarea>
+        <div class="field-help">Be exact. Wrong scale on screen is a top reshoot trigger.</div>
+      </div>
+      <div class="field">
+        <label class="field-label">
+          Photo folder link <span class="crit">CRITICAL</span>
+        </label>
+        <input type="text" class="vid-photo-link" placeholder="Google Drive / iCloud / Dropbox folder URL" />
+        <div class="field-help">Folder must contain <b>at least 10 photos</b> of this exact product, each with a known scale object next to it.</div>
+      </div>
+      <div class="field">
+        <label class="checkbox-line">
+          <input type="checkbox" class="vid-photo-confirm" />
+          <span>I confirm <b>10+ photos</b> have been uploaded to that folder, each showing a <b>known scale object</b> (coin / ruler / finger / credit card).</span>
+        </label>
+      </div>
+    `;
+    body.appendChild(extras);
+
+    const m = extras.querySelector(".vid-measurements");
+    const p = extras.querySelector(".vid-photo-link");
+    const c = extras.querySelector(".vid-photo-confirm");
+    m.value = vid._measurements || "";
+    p.value = vid._photoFolder || "";
+    c.checked = !!vid._photo10Confirmed;
+    m.addEventListener("input", () => { vid._measurements = m.value; save(); });
+    p.addEventListener("input", () => { vid._photoFolder = p.value; save(); });
+    c.addEventListener("change", () => { vid._photo10Confirmed = c.checked; save(); });
+  });
+
+  root.querySelector("#copyFirstAll").addEventListener("click", () => {
+    if (!videos[0]) return;
+    if (!confirm(`Copy Video 1's product details to all ${videos.length} videos? This overwrites existing answers.`)) return;
+    for (let i = 1; i < videos.length; i++) videos[i] = JSON.parse(JSON.stringify(videos[0]));
+    save(); renderWizard();
+  });
+  root.querySelector("#expandAllBlocks").addEventListener("click", () =>
+    root.querySelectorAll("details.video-block").forEach(d => d.open = true));
+  root.querySelector("#collapseAllBlocks").addEventListener("click", () =>
+    root.querySelectorAll("details.video-block").forEach(d => d.open = false));
 }
 
 // ---------- ASSETS STEP ----------
@@ -384,73 +483,14 @@ function renderAssets(ctx) {
   linkInp.addEventListener("input", () => { data._dropLink = linkInp.value; save(); });
 }
 
-// ---------- PER-VIDEO MAP STEP ----------
-function renderVideoMap(ctx) {
-  const root = document.getElementById("wizardContent");
-  state.current.data.videoMap = state.current.data.videoMap || [];
-  const data = state.current.data.videoMap;
-
-  // sync number of rows to videoCount from identity step
-  const target = Number(state.current.data.identity?.videoCount) || data.length || 1;
-  while (data.length < target) data.push({ product: "", sourceImage: "", notes: "" });
-  while (data.length > target && data.length > 1) data.pop();
-
-  root.innerHTML = `
-    <h2>Per-video product map</h2>
-    <p class="step-intro">
-      One line per video. This single habit eliminates the wrong-asset fault. Add the exact piece/variant
-      and a direct link to the source image you want us to use.
-    </p>
-    <table class="video-table">
-      <thead><tr>
-        <th style="width: 56px;">#</th>
-        <th>Exact product / variant</th>
-        <th>Source image link</th>
-        <th style="width: 200px;">Notes (size, shade, metal, volume)</th>
-        <th style="width: 40px;"></th>
-      </tr></thead>
-      <tbody id="videoMapBody"></tbody>
-    </table>
-    <div style="margin-top: 12px; display: flex; gap: 8px;">
-      <button class="btn btn-ghost btn-sm" id="addVideoRow">+ Add row</button>
-    </div>
-  `;
-
-  function drawRows() {
-    const body = root.querySelector("#videoMapBody");
-    body.innerHTML = "";
-    data.forEach((r, i) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><b>${i + 1}</b></td>
-        <td><input class="vm-product" type="text" value="${escapeAttr(r.product)}" placeholder="e.g. 18k rose gold solitaire ring #SK-201" /></td>
-        <td><input class="vm-source" type="text" value="${escapeAttr(r.sourceImage)}" placeholder="https://..." /></td>
-        <td><input class="vm-notes" type="text" value="${escapeAttr(r.notes)}" placeholder="ring size 6.5, 0.5ct" /></td>
-        <td><button class="btn-link vm-del" title="Remove">✕</button></td>
-      `;
-      tr.querySelector(".vm-product").addEventListener("input", e => { r.product = e.target.value; save(); });
-      tr.querySelector(".vm-source").addEventListener("input", e => { r.sourceImage = e.target.value; save(); });
-      tr.querySelector(".vm-notes").addEventListener("input", e => { r.notes = e.target.value; save(); });
-      tr.querySelector(".vm-del").addEventListener("click", () => {
-        if (data.length === 1) return alert("At least one video row is required.");
-        data.splice(i, 1); save(); drawRows();
-      });
-      body.appendChild(tr);
-    });
-  }
-  drawRows();
-
-  root.querySelector("#addVideoRow").addEventListener("click", () => {
-    data.push({ product: "", sourceImage: "", notes: "" }); save(); drawRows();
-  });
-}
-
 // ---------- PRE-FLIGHT CHECKLIST STEP ----------
 const UNIVERSAL_PREFLIGHT = [
-  { key: "aspect",      label: "Aspect ratio(s) confirmed", critical: true },
+  { key: "aspect",      label: "Aspect ratio(s) confirmed per video", critical: true },
   { key: "references",  label: "2–3 reference videos collected", critical: true },
-  { key: "hook",        label: "Hook style chosen", critical: true },
+  { key: "hook",        label: "Hook style chosen per video", critical: true },
   { key: "modesty",     label: "Hijab / modesty / cultural fit confirmed (not assumed)", critical: true },
+  { key: "photos10",    label: "10+ photos per product uploaded, each with a scale reference object", critical: true },
+  { key: "measurements",label: "Exact measurements provided for every product", critical: true },
   { key: "approver",    label: "Single approver named", critical: true },
 ];
 
@@ -628,6 +668,21 @@ function renderBriefView() {
     }).join("");
   };
 
+  // helper: render a per-video section
+  const perVideoBlock = (sectionData, sectionConfig, extraRows) => {
+    const vids = sectionData?.videos || [];
+    if (!vids.length) return "<div class='muted'>(no entries)</div>";
+    return vids.map((vid, i) => {
+      const rows = sectionConfig.fields.map(f => {
+        const v = vid?.[f.key];
+        if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return "";
+        return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(formatVal(v))}</div></div>`;
+      }).join("");
+      const extras = extraRows ? extraRows(vid) : "";
+      return `<div class="video-summary"><h3>Video ${i + 1}</h3>${rows || "<div class='muted'>(blank)</div>"}${extras}</div>`;
+    }).join("");
+  };
+
   let html = `
     <h1>${pack.icon} ${escapeHtml(idn.businessName || "Untitled")} — ${escapeHtml(pack.label)} Shoot Brief</h1>
     <div class="brief-meta">
@@ -636,9 +691,15 @@ function renderBriefView() {
     </div>
 
     <h2>1 · Identity</h2>${kvBlock(d.identity, pack.shared.identity)}
-    <h2>2 · Format</h2>${kvBlock(d.format, pack.shared.format)}
-    <h2>3 · Creative direction</h2>${kvBlock(d.creative, pack.shared.creative)}
-    <h2>4 · Product (${pack.label})</h2>${kvBlock(d.product, pack.product)}
+    <h2>2 · Format — per video</h2>${perVideoBlock(d.format, pack.shared.format)}
+    <h2>3 · Creative — per video</h2>${perVideoBlock(d.creative, pack.shared.creative)}
+    <h2>4 · Product — per video (${escapeHtml(pack.label)})</h2>${perVideoBlock(d.product, pack.product, (vid) => {
+      let extra = "";
+      if (vid._measurements) extra += `<div class="kv"><div class="k">Measurements</div><div class="v">${escapeHtml(vid._measurements)}</div></div>`;
+      if (vid._photoFolder)  extra += `<div class="kv"><div class="k">Photo folder</div><div class="v">${escapeHtml(vid._photoFolder)}</div></div>`;
+      extra += `<div class="kv"><div class="k">10+ photos w/ scale ref</div><div class="v">${vid._photo10Confirmed ? "✓ confirmed" : "— not confirmed"}</div></div>`;
+      return extra;
+    })}
     <h2>5 · Model — modesty</h2>${kvBlock(d.modelModesty, pack.shared.modelModesty)}
     <h2>6 · Model — appearance</h2>${kvBlock(d.modelAppearance, pack.shared.modelAppearance)}
     <h2>7 · Model — other</h2>${kvBlock(d.modelOther, pack.shared.modelOther)}
@@ -647,14 +708,8 @@ function renderBriefView() {
     <h2>10 · On-screen text & branding</h2>${kvBlock(d.textBranding, pack.shared.textBranding)}
   `;
 
-  if (d.sizing && Object.values(d.sizing).some(v => v)) {
-    html += `<h2>11 · Sizing</h2><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody>`;
-    Object.entries(d.sizing).forEach(([k,v]) => v && (html += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`));
-    html += `</tbody></table>`;
-  }
-
   if (d.assets && Object.keys(d.assets).length) {
-    html += `<h2>12 · Asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
+    html += `<h2>11 · Universal asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
     Object.entries(d.assets).filter(([k]) => k !== "_dropLink").forEach(([k, v]) => {
       const label = k.startsWith("extra_") ? k.replace(/^extra_/, "").replace(/_/g, " ") : k;
       html += `<tr><td>${escapeHtml(label)}</td><td>${v ? "✓" : "—"}</td></tr>`;
@@ -663,17 +718,8 @@ function renderBriefView() {
     if (d.assets._dropLink) html += `<div style="margin-top:8px;"><b>Asset drop:</b> ${escapeHtml(d.assets._dropLink)}</div>`;
   }
 
-  if (d.videoMap && d.videoMap.length) {
-    html += `<h2>13 · Per-video product map</h2>
-      <table><thead><tr><th>#</th><th>Product</th><th>Source image</th><th>Notes</th></tr></thead><tbody>`;
-    d.videoMap.forEach((r, i) => {
-      html += `<tr><td>${i+1}</td><td>${escapeHtml(r.product)}</td><td>${escapeHtml(r.sourceImage)}</td><td>${escapeHtml(r.notes)}</td></tr>`;
-    });
-    html += `</tbody></table>`;
-  }
-
   if (d.preflight) {
-    html += `<h2>14 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
+    html += `<h2>12 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
     Object.entries(d.preflight).forEach(([k,v]) => html += `<tr><td>${escapeHtml(k)}</td><td>${v ? "✓" : "—"}</td></tr>`);
     html += `</tbody></table>`;
   }

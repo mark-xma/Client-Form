@@ -49,6 +49,7 @@ function uid() { return Math.random().toString(36).slice(2, 10); }
 // motion/audio, text/branding) stay batch-wide since they're usually consistent.
 const WIZARD_STEPS = [
   { id: "identity",       title: "Project identity",    render: ctx => renderFieldSection(ctx, ctx.pack.shared.identity) },
+  { id: "videos",         title: "Your videos",         render: renderVideosList },
   { id: "format",         title: "Format — per video",  render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.format) },
   { id: "creative",       title: "Creative — per video",render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.creative) },
   { id: "product",        title: "Product — per video", render: renderProductPerVideo },
@@ -328,18 +329,88 @@ function renderPerVideoSection(ctx, section) {
     root.querySelectorAll("details.video-block").forEach(d => d.open = false));
 }
 
+function ensureVideoMeta(count) {
+  state.current.data.videos = state.current.data.videos || [];
+  const list = state.current.data.videos;
+  while (list.length < count) list.push({ title: "", description: "" });
+  while (list.length > count && list.length > 1) list.pop();
+  return list;
+}
+
+function videoLabel(i) {
+  const meta = (state.current.data.videos || [])[i];
+  return meta?.title ? `${i + 1}. ${meta.title}` : `Video ${i + 1}`;
+}
+
 function drawVideoBlocks(root, section, videos, extraRenderer) {
   const container = root.querySelector("#perVideoContainer");
   container.innerHTML = "";
+  const metaList = ensureVideoMeta(videos.length);
+
   videos.forEach((vid, i) => {
+    const meta = metaList[i];
     const block = document.createElement("details");
     block.className = "video-block";
     block.open = i === 0;
-    block.innerHTML = `<summary><span class="vb-num">${i + 1}</span> Video ${i + 1}</summary><div class="vb-body"></div>`;
+    block.innerHTML = `<summary><span class="vb-num">${i + 1}</span> <span class="vb-label">${escapeHtml(videoLabel(i))}</span></summary><div class="vb-body"></div>`;
     const body = block.querySelector(".vb-body");
+
+    // shared title — editable from any per-video step
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "field";
+    titleWrap.innerHTML = `
+      <label class="field-label">Video title (shared across all steps)</label>
+      <input type="text" class="vid-title-inline" value="${escapeAttr(meta.title)}" placeholder="e.g. Hero ring reveal" />
+    `;
+    titleWrap.querySelector(".vid-title-inline").addEventListener("input", e => {
+      meta.title = e.target.value;
+      block.querySelector(".vb-label").textContent = videoLabel(i);
+      save();
+    });
+    body.appendChild(titleWrap);
+
+    // step-specific fields
     section.fields.forEach(f => body.appendChild(renderField(f, vid)));
     if (extraRenderer) extraRenderer(vid, body, i);
     container.appendChild(block);
+  });
+}
+
+// ---------- "YOUR VIDEOS" STEP ----------
+// Dedicated step right after Identity — name every video and write a one-liner
+// describing what should happen. Title & description are reused as the label of
+// each per-video block in Format / Creative / Product.
+function renderVideosList(ctx) {
+  const root = document.getElementById("wizardContent");
+  const count = Math.max(1, Number(state.current.data.identity?.videoCount) || 1);
+  const list = ensureVideoMeta(count);
+
+  root.innerHTML = `
+    <h2>Your videos</h2>
+    <p class="step-intro">
+      Give each video a short title and a 1–2 line description of what should happen.
+      You set <b>${count} video${count === 1 ? "" : "s"}</b> on the previous step — change it there if you need more or fewer.
+    </p>
+    <div id="videosListContainer"></div>
+  `;
+  const container = root.querySelector("#videosListContainer");
+  list.forEach((meta, i) => {
+    const card = document.createElement("div");
+    card.className = "video-meta-card";
+    card.innerHTML = `
+      <div class="vmc-head"><span class="vb-num">${i + 1}</span> <span class="vmc-num">Video ${i + 1}</span></div>
+      <div class="field">
+        <label class="field-label">Title</label>
+        <input type="text" class="vml-title" value="${escapeAttr(meta.title)}" placeholder="e.g. Hero ring reveal · Founder testimonial · Before & after" />
+      </div>
+      <div class="field">
+        <label class="field-label">Description — what should happen in this video?</label>
+        <textarea rows="3" class="vml-desc" placeholder="2–3 lines: the moment, the mood, the message. e.g. 'Close-up of the rose-gold solitaire spinning on a marble plinth, sparkle catches the light, ends on logo + CTA.'">${escapeHtml(meta.description)}</textarea>
+      </div>
+    `;
+    card.querySelector(".vml-title").addEventListener("input", e => { meta.title = e.target.value; save(); });
+    card.querySelector(".vml-desc").addEventListener("input", e => { meta.description = e.target.value; save(); });
+    container.appendChild(card);
   });
 }
 
@@ -669,17 +740,25 @@ function renderBriefView() {
   };
 
   // helper: render a per-video section
+  const meta = d.videos || [];
   const perVideoBlock = (sectionData, sectionConfig, extraRows) => {
     const vids = sectionData?.videos || [];
     if (!vids.length) return "<div class='muted'>(no entries)</div>";
     return vids.map((vid, i) => {
+      const m = meta[i] || {};
+      const title = m.title || `Video ${i + 1}`;
+      const desc = m.description ? `<div class="video-summary-desc">${escapeHtml(m.description)}</div>` : "";
       const rows = sectionConfig.fields.map(f => {
         const v = vid?.[f.key];
         if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return "";
         return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(formatVal(v))}</div></div>`;
       }).join("");
       const extras = extraRows ? extraRows(vid) : "";
-      return `<div class="video-summary"><h3>Video ${i + 1}</h3>${rows || "<div class='muted'>(blank)</div>"}${extras}</div>`;
+      return `<div class="video-summary">
+        <h3>${i + 1}. ${escapeHtml(title)}</h3>
+        ${desc}
+        ${rows || "<div class='muted'>(no answers)</div>"}${extras}
+      </div>`;
     }).join("");
   };
 
@@ -691,25 +770,32 @@ function renderBriefView() {
     </div>
 
     <h2>1 · Identity</h2>${kvBlock(d.identity, pack.shared.identity)}
-    <h2>2 · Format — per video</h2>${perVideoBlock(d.format, pack.shared.format)}
-    <h2>3 · Creative — per video</h2>${perVideoBlock(d.creative, pack.shared.creative)}
-    <h2>4 · Product — per video (${escapeHtml(pack.label)})</h2>${perVideoBlock(d.product, pack.product, (vid) => {
+    <h2>2 · Videos</h2>${
+      (d.videos && d.videos.length)
+        ? `<ol class="brief-video-list">${d.videos.map(v =>
+            `<li><b>${escapeHtml(v.title || "(untitled)")}</b>${v.description ? `<div class="muted">${escapeHtml(v.description)}</div>` : ""}</li>`
+          ).join("")}</ol>`
+        : "<div class='muted'>(no titles set)</div>"
+    }
+    <h2>3 · Format — per video</h2>${perVideoBlock(d.format, pack.shared.format)}
+    <h2>4 · Creative — per video</h2>${perVideoBlock(d.creative, pack.shared.creative)}
+    <h2>5 · Product — per video (${escapeHtml(pack.label)})</h2>${perVideoBlock(d.product, pack.product, (vid) => {
       let extra = "";
       if (vid._measurements) extra += `<div class="kv"><div class="k">Measurements</div><div class="v">${escapeHtml(vid._measurements)}</div></div>`;
       if (vid._photoFolder)  extra += `<div class="kv"><div class="k">Photo folder</div><div class="v">${escapeHtml(vid._photoFolder)}</div></div>`;
       extra += `<div class="kv"><div class="k">10+ photos w/ scale ref</div><div class="v">${vid._photo10Confirmed ? "✓ confirmed" : "— not confirmed"}</div></div>`;
       return extra;
     })}
-    <h2>5 · Model — modesty</h2>${kvBlock(d.modelModesty, pack.shared.modelModesty)}
-    <h2>6 · Model — appearance</h2>${kvBlock(d.modelAppearance, pack.shared.modelAppearance)}
-    <h2>7 · Model — other</h2>${kvBlock(d.modelOther, pack.shared.modelOther)}
-    <h2>8 · Setting / lighting / palette</h2>${kvBlock(d.setting, pack.shared.setting)}
-    <h2>9 · Motion / camera / audio</h2>${kvBlock(d.motionAudio, pack.shared.motionAudio)}
-    <h2>10 · On-screen text & branding</h2>${kvBlock(d.textBranding, pack.shared.textBranding)}
+    <h2>6 · Model — modesty</h2>${kvBlock(d.modelModesty, pack.shared.modelModesty)}
+    <h2>7 · Model — appearance</h2>${kvBlock(d.modelAppearance, pack.shared.modelAppearance)}
+    <h2>8 · Model — other</h2>${kvBlock(d.modelOther, pack.shared.modelOther)}
+    <h2>9 · Setting / lighting / palette</h2>${kvBlock(d.setting, pack.shared.setting)}
+    <h2>10 · Motion / camera / audio</h2>${kvBlock(d.motionAudio, pack.shared.motionAudio)}
+    <h2>11 · On-screen text & branding</h2>${kvBlock(d.textBranding, pack.shared.textBranding)}
   `;
 
   if (d.assets && Object.keys(d.assets).length) {
-    html += `<h2>11 · Universal asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
+    html += `<h2>12 · Universal asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
     Object.entries(d.assets).filter(([k]) => k !== "_dropLink").forEach(([k, v]) => {
       const label = k.startsWith("extra_") ? k.replace(/^extra_/, "").replace(/_/g, " ") : k;
       html += `<tr><td>${escapeHtml(label)}</td><td>${v ? "✓" : "—"}</td></tr>`;
@@ -719,7 +805,7 @@ function renderBriefView() {
   }
 
   if (d.preflight) {
-    html += `<h2>12 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
+    html += `<h2>13 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
     Object.entries(d.preflight).forEach(([k,v]) => html += `<tr><td>${escapeHtml(k)}</td><td>${v ? "✓" : "—"}</td></tr>`);
     html += `</tbody></table>`;
   }

@@ -243,7 +243,26 @@ select { cursor: pointer; }
   border-radius: 50%;
   font-size: 12px; font-weight: 700;
 }
+.video-block .vb-label { flex: 1; }
+.video-block .vb-del,
+.video-meta-card .vmc-del {
+  font-size: 12px; color: var(--danger);
+  background: none; border: none; cursor: pointer;
+  padding: 4px 8px; border-radius: 4px;
+}
+.video-block .vb-del:hover,
+.video-meta-card .vmc-del:hover { background: #fee2e2; }
 .video-block .vb-body { padding: 4px 16px 16px; border-top: 1px solid var(--border); }
+
+/* per-video step toolbar */
+.wizard-toolbar {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .per-video-extras {
   margin-top: 12px; padding-top: 12px;
   border-top: 1px dashed var(--border);

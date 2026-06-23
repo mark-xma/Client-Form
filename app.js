@@ -297,7 +297,7 @@ function renderPerVideoSection(ctx, section) {
   const root = document.getElementById("wizardContent");
   const stepId = WIZARD_STEPS[state.step].id;
   ctx.brief.data[stepId] = ctx.brief.data[stepId] || { videos: [] };
-  const target = Math.max(1, Number(ctx.brief.data.identity?.videoCount) || 1);
+  const target = videoCount();
   const videos = ctx.brief.data[stepId].videos;
   while (videos.length < target) videos.push({});
   while (videos.length > target && videos.length > 1) videos.pop();
@@ -306,22 +306,28 @@ function renderPerVideoSection(ctx, section) {
     <h2>${escapeHtml(section.title)}</h2>
     <p class="step-intro">${escapeHtml(section.intro || "")}</p>
     <p class="muted" style="margin-bottom: 12px;">
-      One block per video. Use <b>Copy first → all</b> if every video shares the same answers.
+      One block per video. Edit each individually, or use <b>Copy first → all</b> to apply the first video's answers to every video at once.
     </p>
-    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first video → all</button>
+    <div class="wizard-toolbar">
+      <button class="btn btn-primary btn-sm" id="addVideoHere">+ Add video</button>
+      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first → all</button>
       <button class="btn btn-ghost btn-sm" id="expandAllBlocks">Expand all</button>
       <button class="btn btn-ghost btn-sm" id="collapseAllBlocks">Collapse all</button>
     </div>
     <div id="perVideoContainer"></div>
   `;
-  drawVideoBlocks(root, section, videos);
+  drawVideoBlocks(root, section, videos, null, () => renderPerVideoSection(ctx, section));
 
+  root.querySelector("#addVideoHere").addEventListener("click", () => {
+    addVideo();
+    renderPerVideoSection(ctx, section);
+  });
   root.querySelector("#copyFirstAll").addEventListener("click", () => {
     if (!videos[0]) return;
-    if (!confirm(`Copy Video 1's answers to all ${videos.length} videos? This overwrites any existing answers in videos 2+.`)) return;
+    if (!confirm(`Copy Video 1's answers to all ${videos.length} videos? This overwrites existing answers.`)) return;
     for (let i = 1; i < videos.length; i++) videos[i] = JSON.parse(JSON.stringify(videos[0]));
-    save(); drawVideoBlocks(root, section, videos);
+    save();
+    drawVideoBlocks(root, section, videos, null, () => renderPerVideoSection(ctx, section));
   });
   root.querySelector("#expandAllBlocks").addEventListener("click", () =>
     root.querySelectorAll("details.video-block").forEach(d => d.open = true));
@@ -342,7 +348,43 @@ function videoLabel(i) {
   return meta?.title ? `${i + 1}. ${meta.title}` : `Video ${i + 1}`;
 }
 
-function drawVideoBlocks(root, section, videos, extraRenderer) {
+// ---------- ADD / REMOVE VIDEO (synced across every per-video step) ----------
+const PER_VIDEO_STEPS = ["format", "creative", "product"];
+
+function videoCount() {
+  return Math.max(1, (state.current.data.videos || []).length || Number(state.current.data.identity?.videoCount) || 1);
+}
+
+function addVideo() {
+  const d = state.current.data;
+  d.videos = d.videos || [];
+  d.videos.push({ title: "", description: "" });
+  PER_VIDEO_STEPS.forEach(k => {
+    d[k] = d[k] || { videos: [] };
+    d[k].videos = d[k].videos || [];
+    d[k].videos.push({});
+  });
+  d.identity = d.identity || {};
+  d.identity.videoCount = d.videos.length;
+  save();
+}
+
+function removeVideo(i) {
+  const d = state.current.data;
+  if ((d.videos || []).length <= 1) {
+    alert("You need at least one video.");
+    return;
+  }
+  d.videos.splice(i, 1);
+  PER_VIDEO_STEPS.forEach(k => {
+    if (d[k] && Array.isArray(d[k].videos)) d[k].videos.splice(i, 1);
+  });
+  d.identity = d.identity || {};
+  d.identity.videoCount = d.videos.length;
+  save();
+}
+
+function drawVideoBlocks(root, section, videos, extraRenderer, redraw) {
   const container = root.querySelector("#perVideoContainer");
   container.innerHTML = "";
   const metaList = ensureVideoMeta(videos.length);
@@ -352,7 +394,14 @@ function drawVideoBlocks(root, section, videos, extraRenderer) {
     const block = document.createElement("details");
     block.className = "video-block";
     block.open = i === 0;
-    block.innerHTML = `<summary><span class="vb-num">${i + 1}</span> <span class="vb-label">${escapeHtml(videoLabel(i))}</span></summary><div class="vb-body"></div>`;
+    block.innerHTML = `
+      <summary>
+        <span class="vb-num">${i + 1}</span>
+        <span class="vb-label">${escapeHtml(videoLabel(i))}</span>
+        ${videos.length > 1 ? `<button class="btn-link vb-del" title="Remove this video">Remove</button>` : ""}
+      </summary>
+      <div class="vb-body"></div>
+    `;
     const body = block.querySelector(".vb-body");
 
     // shared title — editable from any per-video step
@@ -372,6 +421,16 @@ function drawVideoBlocks(root, section, videos, extraRenderer) {
     // step-specific fields
     section.fields.forEach(f => body.appendChild(renderField(f, vid)));
     if (extraRenderer) extraRenderer(vid, body, i);
+
+    // per-block remove
+    const delBtn = block.querySelector(".vb-del");
+    if (delBtn) delBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!confirm(`Remove Video ${i + 1}? Its answers in all steps will be deleted.`)) return;
+      removeVideo(i);
+      if (redraw) redraw();
+    });
+
     container.appendChild(block);
   });
 }
@@ -382,35 +441,65 @@ function drawVideoBlocks(root, section, videos, extraRenderer) {
 // each per-video block in Format / Creative / Product.
 function renderVideosList(ctx) {
   const root = document.getElementById("wizardContent");
-  const count = Math.max(1, Number(state.current.data.identity?.videoCount) || 1);
-  const list = ensureVideoMeta(count);
+  const count = videoCount();
+  ensureVideoMeta(count);
+  // also make sure every per-video step has matching rows
+  PER_VIDEO_STEPS.forEach(k => {
+    state.current.data[k] = state.current.data[k] || { videos: [] };
+    while (state.current.data[k].videos.length < count) state.current.data[k].videos.push({});
+    while (state.current.data[k].videos.length > count && state.current.data[k].videos.length > 1) state.current.data[k].videos.pop();
+  });
 
   root.innerHTML = `
     <h2>Your videos</h2>
     <p class="step-intro">
-      Give each video a short title and a 1–2 line description of what should happen.
-      You set <b>${count} video${count === 1 ? "" : "s"}</b> on the previous step — change it there if you need more or fewer.
+      Give each video a title and a short description. Add or remove videos any time —
+      Format / Creative / Product will automatically stay in sync.
     </p>
     <div id="videosListContainer"></div>
+    <div style="margin-top: 14px; display: flex; gap: 8px;">
+      <button class="btn btn-primary btn-sm" id="addVideoBtn">+ Add another video</button>
+    </div>
   `;
-  const container = root.querySelector("#videosListContainer");
-  list.forEach((meta, i) => {
-    const card = document.createElement("div");
-    card.className = "video-meta-card";
-    card.innerHTML = `
-      <div class="vmc-head"><span class="vb-num">${i + 1}</span> <span class="vmc-num">Video ${i + 1}</span></div>
-      <div class="field">
-        <label class="field-label">Title</label>
-        <input type="text" class="vml-title" value="${escapeAttr(meta.title)}" placeholder="e.g. Hero ring reveal · Founder testimonial · Before & after" />
-      </div>
-      <div class="field">
-        <label class="field-label">Description — what should happen in this video?</label>
-        <textarea rows="3" class="vml-desc" placeholder="2–3 lines: the moment, the mood, the message. e.g. 'Close-up of the rose-gold solitaire spinning on a marble plinth, sparkle catches the light, ends on logo + CTA.'">${escapeHtml(meta.description)}</textarea>
-      </div>
-    `;
-    card.querySelector(".vml-title").addEventListener("input", e => { meta.title = e.target.value; save(); });
-    card.querySelector(".vml-desc").addEventListener("input", e => { meta.description = e.target.value; save(); });
-    container.appendChild(card);
+
+  function draw() {
+    const container = root.querySelector("#videosListContainer");
+    const list = state.current.data.videos;
+    container.innerHTML = "";
+    list.forEach((meta, i) => {
+      const card = document.createElement("div");
+      card.className = "video-meta-card";
+      card.innerHTML = `
+        <div class="vmc-head">
+          <span class="vb-num">${i + 1}</span>
+          <span class="vmc-num">Video ${i + 1}</span>
+          ${list.length > 1 ? `<button class="btn-link vmc-del" title="Remove this video">Remove</button>` : ""}
+        </div>
+        <div class="field">
+          <label class="field-label">Title</label>
+          <input type="text" class="vml-title" value="${escapeAttr(meta.title)}" placeholder="e.g. Hero ring reveal · Founder testimonial · Before & after" />
+        </div>
+        <div class="field">
+          <label class="field-label">Description — what should happen in this video?</label>
+          <textarea rows="3" class="vml-desc" placeholder="2–3 lines: the moment, the mood, the message. e.g. 'Close-up of the rose-gold solitaire spinning on a marble plinth, sparkle catches the light, ends on logo + CTA.'">${escapeHtml(meta.description)}</textarea>
+        </div>
+      `;
+      card.querySelector(".vml-title").addEventListener("input", e => { meta.title = e.target.value; save(); });
+      card.querySelector(".vml-desc").addEventListener("input", e => { meta.description = e.target.value; save(); });
+      const del = card.querySelector(".vmc-del");
+      if (del) del.addEventListener("click", () => {
+        if (!confirm(`Remove Video ${i + 1}? All its Format, Creative, and Product answers will be deleted.`)) return;
+        removeVideo(i);
+        draw();
+      });
+      container.appendChild(card);
+    });
+  }
+  draw();
+
+  root.querySelector("#addVideoBtn").addEventListener("click", () => {
+    addVideo();
+    draw();
   });
 }
 
@@ -419,7 +508,7 @@ function renderProductPerVideo(ctx) {
   const root = document.getElementById("wizardContent");
   const pack = ctx.pack;
   state.current.data.product = state.current.data.product || { videos: [] };
-  const target = Math.max(1, Number(state.current.data.identity?.videoCount) || 1);
+  const target = videoCount();
   const videos = state.current.data.product.videos;
   while (videos.length < target) videos.push({});
   while (videos.length > target && videos.length > 1) videos.pop();
@@ -438,8 +527,9 @@ function renderProductPerVideo(ctx) {
     <p class="muted" style="font-size: 12px; margin-bottom: 14px;">
       <b>What to measure for ${escapeHtml(pack.label)}:</b> ${measurementHint}
     </p>
-    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first video → all</button>
+    <div class="wizard-toolbar">
+      <button class="btn btn-primary btn-sm" id="addVideoHere">+ Add video</button>
+      <button class="btn btn-ghost btn-sm" id="copyFirstAll">Copy first → all</button>
       <button class="btn btn-ghost btn-sm" id="expandAllBlocks">Expand all</button>
       <button class="btn btn-ghost btn-sm" id="collapseAllBlocks">Collapse all</button>
     </div>
@@ -481,13 +571,17 @@ function renderProductPerVideo(ctx) {
     m.addEventListener("input", () => { vid._measurements = m.value; save(); });
     p.addEventListener("input", () => { vid._photoFolder = p.value; save(); });
     c.addEventListener("change", () => { vid._photo10Confirmed = c.checked; save(); });
-  });
+  }, () => renderProductPerVideo(ctx));
 
+  root.querySelector("#addVideoHere").addEventListener("click", () => {
+    addVideo();
+    renderProductPerVideo(ctx);
+  });
   root.querySelector("#copyFirstAll").addEventListener("click", () => {
     if (!videos[0]) return;
     if (!confirm(`Copy Video 1's product details to all ${videos.length} videos? This overwrites existing answers.`)) return;
     for (let i = 1; i < videos.length; i++) videos[i] = JSON.parse(JSON.stringify(videos[0]));
-    save(); renderWizard();
+    save(); renderProductPerVideo(ctx);
   });
   root.querySelector("#expandAllBlocks").addEventListener("click", () =>
     root.querySelectorAll("details.video-block").forEach(d => d.open = true));

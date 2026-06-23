@@ -170,14 +170,7 @@ document.getElementById("wizardBack").addEventListener("click", () => {
   if (state.step > 0) { state.step--; save(); renderWizard(); }
 });
 document.getElementById("wizardNext").addEventListener("click", () => {
-  const pack = XMA_PACKS[state.current.category];
-  const step = WIZARD_STEPS[state.step];
-  // basic required-field validation
-  const missing = validateStep(step, pack);
-  if (missing.length) {
-    alert("Please fill in:\n• " + missing.join("\n• "));
-    return;
-  }
+  // Navigation is unblocked — required-field markers (* and CRITICAL) are guidance only.
   if (state.step < WIZARD_STEPS.length - 1) {
     state.step++; save(); renderWizard();
   } else {

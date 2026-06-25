@@ -227,6 +227,65 @@ select { cursor: pointer; }
   border-color: var(--warning) !important;
 }
 
+/* Selected-option preview (swatch / emoji / image) */
+.preview-slot:empty { display: none; }
+.field-preview {
+  margin-top: 6px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px 4px 6px;
+}
+.opt-swatch {
+  display: inline-block;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+  background-size: cover;
+}
+.opt-emoji { font-size: 16px; line-height: 1; }
+.opt-img {
+  width: 40px; height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+.chip .opt-emoji { font-size: 14px; margin-right: 4px; }
+
+/* Prompt builder */
+.prompt-block { margin-bottom: 24px; }
+.prompt-block h3 { font-size: 16px; margin-bottom: 12px; }
+.prompt-pair {
+  display: grid; gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 720px) { .prompt-pair { grid-template-columns: 1fr; } }
+.prompt-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+.prompt-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.prompt-card-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.prompt-card textarea {
+  width: 100%; min-height: 160px; font-size: 12px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  line-height: 1.5; resize: vertical;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.copy-btn.copied { background: var(--success) !important; color: white; border-color: var(--success); }
+
 /* multi-select chips */
 .multi-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {

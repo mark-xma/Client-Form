@@ -14,18 +14,46 @@ window.XMA_PACKS = (() => {
     "Volumized","Sleek close","With cap edge","Half-covered hair","Niqab","Khaleeji shayla",
     "Modern minimal","Layered","Pastel","Neutral tone","Jewel-tone","Metallic accent","Floral print","Solid classic"
   ];
+  // Skin tones use real swatch colors so the client can VISUALLY pick the right tone
+  // instead of guessing from words. Color values are approximate undertone references.
   const SKIN_TONES = [
-    "Porcelain","Fair","Light beige","Light warm","Light cool","Ivory","Nude/neutral","Medium beige",
-    "Medium olive","Medium warm","Sun-kissed","Golden tan","Honey","Caramel","Amber","Bronze",
-    "Deep tan","Warm brown","Olive deep","Chestnut","Mocha","Espresso","Deep brown","Rich ebony",
-    "Dark cool","Dark warm","Sand","Peachy","Rosy fair","Neutral medium","Cool deep","Warm deep"
+    { label: "Porcelain", swatch: "#F5DCC8" }, { label: "Fair", swatch: "#F0CFB4" },
+    { label: "Light beige", swatch: "#EDC5A4" }, { label: "Light warm", swatch: "#E8BC97" },
+    { label: "Light cool", swatch: "#E3C0A8" }, { label: "Ivory", swatch: "#F0DAC2" },
+    { label: "Nude/neutral", swatch: "#E5BFA0" }, { label: "Medium beige", swatch: "#D4A57F" },
+    { label: "Medium olive", swatch: "#C19A6B" }, { label: "Medium warm", swatch: "#CC9A6E" },
+    { label: "Sun-kissed", swatch: "#C1875E" }, { label: "Golden tan", swatch: "#B57A4E" },
+    { label: "Honey", swatch: "#AC7141" }, { label: "Caramel", swatch: "#A06334" },
+    { label: "Amber", swatch: "#955E2E" }, { label: "Bronze", swatch: "#8A5128" },
+    { label: "Deep tan", swatch: "#7E4624" }, { label: "Warm brown", swatch: "#714020" },
+    { label: "Olive deep", swatch: "#6C4424" }, { label: "Chestnut", swatch: "#5E371F" },
+    { label: "Mocha", swatch: "#553219" }, { label: "Espresso", swatch: "#4A2A15" },
+    { label: "Deep brown", swatch: "#3F2410" }, { label: "Rich ebony", swatch: "#2E1A0B" },
+    { label: "Dark cool", swatch: "#3A2418" }, { label: "Dark warm", swatch: "#42230D" },
+    { label: "Sand", swatch: "#D7B58A" }, { label: "Peachy", swatch: "#F0BFA0" },
+    { label: "Rosy fair", swatch: "#F0C7B3" }, { label: "Neutral medium", swatch: "#C99A78" },
+    { label: "Cool deep", swatch: "#4D2E20" }, { label: "Warm deep", swatch: "#5A2E15" }
   ];
+  // Nationalities get flag emojis where applicable
   const NATIONALITIES = [
-    "Emirati / Khaleeji","Saudi","Qatari","Kuwaiti","Omani","Bahraini","Lebanese","Syrian","Jordanian",
-    "Palestinian","Egyptian","Iraqi","Moroccan","Tunisian","Algerian","Iranian / Persian","Turkish",
-    "Pakistani","Indian","Bangladeshi","Filipino","Indonesian","Malaysian","British","French","Italian",
-    "Spanish","Russian","Eastern European","Brazilian","Latina","East Asian","African","North African",
-    "Mixed / ambiguous","Representative of target audience"
+    { label: "Emirati / Khaleeji", emoji: "🇦🇪" }, { label: "Saudi", emoji: "🇸🇦" },
+    { label: "Qatari", emoji: "🇶🇦" }, { label: "Kuwaiti", emoji: "🇰🇼" },
+    { label: "Omani", emoji: "🇴🇲" }, { label: "Bahraini", emoji: "🇧🇭" },
+    { label: "Lebanese", emoji: "🇱🇧" }, { label: "Syrian", emoji: "🇸🇾" },
+    { label: "Jordanian", emoji: "🇯🇴" }, { label: "Palestinian", emoji: "🇵🇸" },
+    { label: "Egyptian", emoji: "🇪🇬" }, { label: "Iraqi", emoji: "🇮🇶" },
+    { label: "Moroccan", emoji: "🇲🇦" }, { label: "Tunisian", emoji: "🇹🇳" },
+    { label: "Algerian", emoji: "🇩🇿" }, { label: "Iranian / Persian", emoji: "🇮🇷" },
+    { label: "Turkish", emoji: "🇹🇷" }, { label: "Pakistani", emoji: "🇵🇰" },
+    { label: "Indian", emoji: "🇮🇳" }, { label: "Bangladeshi", emoji: "🇧🇩" },
+    { label: "Filipino", emoji: "🇵🇭" }, { label: "Indonesian", emoji: "🇮🇩" },
+    { label: "Malaysian", emoji: "🇲🇾" }, { label: "British", emoji: "🇬🇧" },
+    { label: "French", emoji: "🇫🇷" }, { label: "Italian", emoji: "🇮🇹" },
+    { label: "Spanish", emoji: "🇪🇸" }, { label: "Russian", emoji: "🇷🇺" },
+    { label: "Eastern European", emoji: "🌍" }, { label: "Brazilian", emoji: "🇧🇷" },
+    { label: "Latina", emoji: "🌎" }, { label: "East Asian", emoji: "🌏" },
+    { label: "African", emoji: "🌍" }, { label: "North African", emoji: "🌍" },
+    { label: "Mixed / ambiguous", emoji: "🌐" }, { label: "Representative of target audience", emoji: "🎯" }
   ];
   const HAIR = [
     "Black straight","Black wavy","Black curly","Dark brown straight","Dark brown wavy","Chestnut","Auburn",
@@ -34,12 +62,24 @@ window.XMA_PACKS = (() => {
     "Tight curls","Afro/coily","Pixie cut","Shoulder length","Half-up","Low bun","High bun",
     "Sleek ponytail","Braided","Wet-look","Voluminous blowout","Covered (hijab)","Partially covered"
   ];
+  // Expressions get emoji previews for instant recognition
   const EXPRESSIONS = [
-    "Soft smile","Confident","Serene","Aspirational gaze","Playful","Joyful laugh","Mysterious",
-    "Sensual (modest)","Elegant calm","Candid","Editorial neutral","Powerful","Dreamy","Warm inviting",
-    "Focused","Surprised delight","Subtle smirk","Looking away","Direct eye contact","Eyes closed",
-    "Over-the-shoulder","Contemplative","Radiant","Cool/aloof","Approachable","Luxurious ease",
-    "Fresh/natural","Glamorous","Intense","Gentle","Proud","Captivated"
+    { label: "Soft smile", emoji: "🙂" }, { label: "Confident", emoji: "😎" },
+    { label: "Serene", emoji: "😌" }, { label: "Aspirational gaze", emoji: "✨" },
+    { label: "Playful", emoji: "😜" }, { label: "Joyful laugh", emoji: "😄" },
+    { label: "Mysterious", emoji: "🌒" }, { label: "Sensual (modest)", emoji: "💋" },
+    { label: "Elegant calm", emoji: "🤍" }, { label: "Candid", emoji: "📸" },
+    { label: "Editorial neutral", emoji: "🧊" }, { label: "Powerful", emoji: "💪" },
+    { label: "Dreamy", emoji: "💭" }, { label: "Warm inviting", emoji: "🌅" },
+    { label: "Focused", emoji: "🎯" }, { label: "Surprised delight", emoji: "😲" },
+    { label: "Subtle smirk", emoji: "😏" }, { label: "Looking away", emoji: "👀" },
+    { label: "Direct eye contact", emoji: "👁" }, { label: "Eyes closed", emoji: "😶" },
+    { label: "Over-the-shoulder", emoji: "🙇‍♀️" }, { label: "Contemplative", emoji: "🤔" },
+    { label: "Radiant", emoji: "🌟" }, { label: "Cool/aloof", emoji: "🧊" },
+    { label: "Approachable", emoji: "🤝" }, { label: "Luxurious ease", emoji: "🥂" },
+    { label: "Fresh/natural", emoji: "🌿" }, { label: "Glamorous", emoji: "💎" },
+    { label: "Intense", emoji: "🔥" }, { label: "Gentle", emoji: "🕊" },
+    { label: "Proud", emoji: "👑" }, { label: "Captivated", emoji: "💫" }
   ];
   const WARDROBE = [
     "Abaya (classic black)","Abaya (colored)","Abaya (embellished)","Kaftan","Modern modest dress",
@@ -67,12 +107,27 @@ window.XMA_PACKS = (() => {
     "Moody chiaroscuro","Color gel (brand)","Reflected fill","Dappled/leaf shadow","Glossy reflective",
     "Matte even","Cinematic teal-orange","Soft pink glow","Luxury amber"
   ];
+  // Color palettes get swatches so the client sees the dominant tone they're picking
   const PALETTES = [
-    "Brand colors","Nude/neutral","Black & gold","White & gold","Rose gold","Champagne","Pastel pink",
-    "Blush","Burgundy","Deep red","Emerald green","Sapphire blue","Navy","Teal","Lavender","Lilac",
-    "Cream/ivory","Beige/sand","Terracotta","Mustard","Coral","Monochrome white","Monochrome black",
-    "Jewel tones","Earth tones","Metallic silver","Copper/bronze","Pearl/iridescent","Soft grey",
-    "Forest green","Plum","Peach"
+    { label: "Brand colors", swatch: "linear-gradient(90deg,#000,#fff)" },
+    { label: "Nude/neutral", swatch: "#D4B79A" }, { label: "Black & gold", swatch: "linear-gradient(90deg,#000 50%,#D4AF37 50%)" },
+    { label: "White & gold", swatch: "linear-gradient(90deg,#fff 50%,#D4AF37 50%)" },
+    { label: "Rose gold", swatch: "#B76E79" }, { label: "Champagne", swatch: "#F7E7CE" },
+    { label: "Pastel pink", swatch: "#FFD1DC" }, { label: "Blush", swatch: "#DE9CA1" },
+    { label: "Burgundy", swatch: "#800020" }, { label: "Deep red", swatch: "#A91B0D" },
+    { label: "Emerald green", swatch: "#046307" }, { label: "Sapphire blue", swatch: "#0F52BA" },
+    { label: "Navy", swatch: "#000080" }, { label: "Teal", swatch: "#008080" },
+    { label: "Lavender", swatch: "#B57EDC" }, { label: "Lilac", swatch: "#C8A2C8" },
+    { label: "Cream/ivory", swatch: "#FFFDD0" }, { label: "Beige/sand", swatch: "#E0C49A" },
+    { label: "Terracotta", swatch: "#C56A4D" }, { label: "Mustard", swatch: "#D4A300" },
+    { label: "Coral", swatch: "#FF7F50" }, { label: "Monochrome white", swatch: "#FFFFFF" },
+    { label: "Monochrome black", swatch: "#0A0A0A" },
+    { label: "Jewel tones", swatch: "linear-gradient(90deg,#046307,#0F52BA,#800020)" },
+    { label: "Earth tones", swatch: "linear-gradient(90deg,#8B6F47,#C19A6B,#3E2723)" },
+    { label: "Metallic silver", swatch: "#C0C0C0" }, { label: "Copper/bronze", swatch: "#B87333" },
+    { label: "Pearl/iridescent", swatch: "linear-gradient(90deg,#F8F8FF,#E6E6FA,#FFEFD5)" },
+    { label: "Soft grey", swatch: "#BEBEBE" }, { label: "Forest green", swatch: "#228B22" },
+    { label: "Plum", swatch: "#8E4585" }, { label: "Peach", swatch: "#FFCBA4" }
   ];
   const NAIL_STYLES = [
     "Bare natural","Clear gloss","Nude","Soft pink","French","Red classic","Burgundy","Deep plum",
@@ -170,8 +225,9 @@ window.XMA_PACKS = (() => {
         { key: "skinInMotion", label: "Any extra skin exposure on movement?", type: "select",
           options: ["No — strict, never extra exposure on movement","Yes — standard"],
           help: "AI can reveal skin in motion that a still doesn't. If strict we lock no-exposure rules." },
-        { key: "hijabStyle", label: "If hijab — which style?", type: "select", options: HIJAB_STYLES,
-          help: "Only fill if hijab is on. Style varies a lot — pin one down or attach a reference photo." },
+        { key: "hijabStyle", label: "Hijab style", type: "select", options: HIJAB_STYLES,
+          dependsOn: { key: "hijab", notIn: ["", "No hijab"] },
+          help: "Style varies a lot — pin one down or attach a reference photo in Assets." },
 
         // --- Appearance ---
         { key: "skinTone", label: "Skin tone", type: "select", options: SKIN_TONES },

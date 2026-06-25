@@ -130,6 +130,7 @@ const WIZARD_STEPS = [
   { id: "motionAudio",    title: "Motion, camera & audio", render: ctx => renderFieldSection(ctx, ctx.pack.shared.motionAudio) },
   { id: "textBranding",   title: "On-screen text & branding", render: ctx => renderFieldSection(ctx, ctx.pack.shared.textBranding) },
   { id: "assets",         title: "Universal assets",    render: renderAssets },
+  { id: "prompts",        title: "Generated prompts",   render: renderPrompts },
   { id: "preflight",      title: "Pre-flight & submit", render: renderPreflight },
 ];
 
@@ -420,9 +421,40 @@ function renderFieldSection(ctx, section) {
 
 const OTHER = "Other (specify)";
 
-function renderField(f, dataObj) {
+// Option helpers — let pack options be either strings or objects { label, swatch, emoji, img }
+const optLabel  = (o) => typeof o === "string" ? o : (o?.label ?? "");
+const optSwatch = (o) => typeof o === "object" ? o.swatch : null;
+const optEmoji  = (o) => typeof o === "object" ? o.emoji  : null;
+const optImg    = (o) => typeof o === "object" ? o.img    : null;
+
+function renderOptionPreview(option) {
+  if (!option) return "";
+  const sw = optSwatch(option), em = optEmoji(option), im = optImg(option);
+  if (!sw && !em && !im) return "";
+  let chunks = [];
+  if (sw) chunks.push(`<span class="opt-swatch" style="background:${sw}"></span>`);
+  if (em) chunks.push(`<span class="opt-emoji">${em}</span>`);
+  if (im) chunks.push(`<img class="opt-img" src="${escapeAttr(im)}" alt="">`);
+  return `<div class="field-preview">${chunks.join("")}<span>${escapeHtml(optLabel(option))}</span></div>`;
+}
+
+// Check a field's dependsOn condition against current dataObj
+function fieldShouldShow(f, dataObj) {
+  if (!f.dependsOn) return true;
+  const dep = f.dependsOn;
+  const val = dataObj[dep.key];
+  if ("equals" in dep) return val === dep.equals;
+  if ("notEquals" in dep) return val !== dep.notEquals;
+  if ("notIn" in dep) return !dep.notIn.includes(val ?? "");
+  if ("in" in dep) return dep.in.includes(val ?? "");
+  if ("not" in dep) return val !== dep.not;
+  return true;
+}
+
+function renderField(f, dataObj, onChange) {
   const wrap = document.createElement("div");
   wrap.className = "field";
+  if (!fieldShouldShow(f, dataObj)) wrap.style.display = "none";
 
   const label = document.createElement("label");
   label.className = "field-label";
@@ -439,17 +471,31 @@ function renderField(f, dataObj) {
     input.rows = 3;
     if (f.placeholder) input.placeholder = f.placeholder;
     input.value = dataObj[f.key] ?? "";
-    input.addEventListener("input", () => { dataObj[f.key] = input.value; save(); });
+    input.addEventListener("input", () => { dataObj[f.key] = input.value; save(); onChange?.(f.key); });
     wrap.appendChild(input);
   }
   else if (f.type === "select") {
     input = document.createElement("select");
     const opts = [...f.options, OTHER];
+    const currentVal = dataObj[f.key];
     input.innerHTML = `<option value="">— pick one —</option>` +
-      opts.map(o => `<option ${dataObj[f.key] === o ? "selected" : ""}>${escapeHtml(o)}</option>`).join("");
+      opts.map(o => {
+        const lab = optLabel(o);
+        return `<option value="${escapeAttr(lab)}" ${currentVal === lab ? "selected" : ""}>${escapeHtml(lab)}</option>`;
+      }).join("");
     wrap.appendChild(input);
 
-    // free-text input for "Other"
+    // visual preview of currently-selected option (swatch / emoji / img)
+    const previewWrap = document.createElement("div");
+    previewWrap.className = "preview-slot";
+    const updatePreview = () => {
+      const sel = opts.find(o => optLabel(o) === dataObj[f.key]);
+      previewWrap.innerHTML = renderOptionPreview(sel);
+    };
+    updatePreview();
+    wrap.appendChild(previewWrap);
+
+    // free-text "Other" input
     const otherKey = f.key + "_other";
     const otherInput = document.createElement("input");
     otherInput.type = "text";
@@ -464,7 +510,9 @@ function renderField(f, dataObj) {
       dataObj[f.key] = input.value;
       otherInput.style.display = input.value === OTHER ? "block" : "none";
       if (input.value !== OTHER) { delete dataObj[otherKey]; otherInput.value = ""; }
+      updatePreview();
       save();
+      onChange?.(f.key);
     });
   }
   else if (f.type === "multi") {
@@ -472,23 +520,25 @@ function renderField(f, dataObj) {
     input.className = "multi-options";
     const current = Array.isArray(dataObj[f.key]) ? dataObj[f.key] : [];
     f.options.forEach(o => {
+      const lab = optLabel(o);
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "chip" + (current.includes(o) ? " checked" : "");
-      chip.textContent = o;
+      chip.className = "chip" + (current.includes(lab) ? " checked" : "");
+      const em = optEmoji(o);
+      chip.innerHTML = `${em ? `<span class="opt-emoji">${em}</span>` : ""}${escapeHtml(lab)}`;
       chip.addEventListener("click", () => {
         const arr = Array.isArray(dataObj[f.key]) ? dataObj[f.key] : [];
-        const idx = arr.indexOf(o);
-        if (idx >= 0) arr.splice(idx, 1); else arr.push(o);
+        const idx = arr.indexOf(lab);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(lab);
         dataObj[f.key] = arr;
-        chip.classList.toggle("checked", arr.includes(o));
+        chip.classList.toggle("checked", arr.includes(lab));
         save();
+        onChange?.(f.key);
       });
       input.appendChild(chip);
     });
     wrap.appendChild(input);
 
-    // Free-text additional values for multi (comma-separated)
     const otherKey = f.key + "_other";
     const otherInput = document.createElement("input");
     otherInput.type = "text";
@@ -507,6 +557,7 @@ function renderField(f, dataObj) {
     input.addEventListener("input", () => {
       dataObj[f.key] = f.type === "number" ? (input.value === "" ? "" : Number(input.value)) : input.value;
       save();
+      onChange?.(f.key);
     });
     wrap.appendChild(input);
   }
@@ -778,8 +829,21 @@ function renderModels(ctx) {
       });
       body.appendChild(nameWrap);
 
-      // All shared model fields
-      section.fields.forEach(f => body.appendChild(renderField(f, m)));
+      // All shared model fields — pass an onChange callback so dependent
+      // fields (e.g. hijabStyle depending on hijab) re-render their visibility.
+      const fieldNodes = new Map();
+      const refreshDeps = () => {
+        section.fields.forEach(f => {
+          const node = fieldNodes.get(f.key);
+          if (!node) return;
+          node.style.display = fieldShouldShow(f, m) ? "" : "none";
+        });
+      };
+      section.fields.forEach(f => {
+        const node = renderField(f, m, () => refreshDeps());
+        fieldNodes.set(f.key, node);
+        body.appendChild(node);
+      });
 
       // Remove button
       const delBtn = block.querySelector(".vb-del");
@@ -1058,6 +1122,287 @@ function renderAssets(ctx) {
   const linkInp = document.getElementById("assetDropLink");
   linkInp.value = data._dropLink || "";
   linkInp.addEventListener("input", () => { data._dropLink = linkInp.value; save(); });
+}
+
+// ---------- PROMPT BUILDER ----------
+// Compiles every field the wizard collected into ready-to-paste prompts for
+// AI video tools (Sora, Veo, Higgsfield, Runway, etc.). Two formats per video:
+//   - Structured (sectioned, easier to edit)
+//   - Paragraph (single dense block, drop straight into a prompt box)
+// Plus per-model character prompts.
+
+function describeModel(m) {
+  if (!m) return "";
+  const parts = [];
+  if (m.ageRange)    parts.push(m.ageRange.toLowerCase());
+  if (m.gender)      parts.push(m.gender.toLowerCase());
+  if (m.bodyType)    parts.push(`${m.bodyType.toLowerCase()} build`);
+  if (m.nationality) parts.push(`${m.nationality.toLowerCase()} look`);
+  if (m.skinTone)    parts.push(`${m.skinTone.toLowerCase()} skin`);
+  if (m.hair && m.hair !== "Covered (hijab)") parts.push(`${m.hair.toLowerCase()} hair`);
+  if (m.hijab && m.hijab !== "No hijab") {
+    parts.push(m.hijabStyle ? `${m.hijabStyle.toLowerCase()} ${m.hijab.toLowerCase()}` : m.hijab.toLowerCase());
+  }
+  if (m.modestyLevel && m.modestyLevel !== "Standard (no restrictions)") parts.push(m.modestyLevel.toLowerCase());
+  if (m.wardrobe)    parts.push(`wearing ${m.wardrobe.toLowerCase()}`);
+  if (m.makeup)      parts.push(`${m.makeup.toLowerCase()} makeup`);
+  if (m.nailStyle)   parts.push(`${m.nailStyle.toLowerCase()} nails`);
+  if (m.expression)  parts.push(`${m.expression.toLowerCase()} expression`);
+  return parts.join(", ");
+}
+
+function describeProduct(productData, pack) {
+  if (!productData) return "";
+  const skipKeys = new Set(["_measurements","_photoFolder","_photo10Confirmed"]);
+  const bits = [];
+  (pack.product?.fields || []).forEach(f => {
+    if (skipKeys.has(f.key)) return;
+    const v = productData[f.key];
+    if (!v || v === "" || (Array.isArray(v) && v.length === 0)) return;
+    bits.push(`${f.label.toLowerCase()}: ${Array.isArray(v) ? v.join(", ").toLowerCase() : String(v).toLowerCase()}`);
+  });
+  return bits.join("; ");
+}
+
+function compilePrompts(brief) {
+  const d = brief.data;
+  const pack = XMA_PACKS[brief.category];
+  const videos = d.videos || [];
+  const setting = d.setting || {};
+  const motion  = d.motionAudio || {};
+  const branding = d.textBranding || {};
+
+  const perVideo = videos.map((meta, i) => {
+    const fmt      = d.format?.videos?.[i] || {};
+    const creative = d.creative?.videos?.[i] || {};
+    const product  = d.product?.videos?.[i]  || {};
+    const cast     = (meta.cast || []).map(id => d.models?.find(m => m.id === id)).filter(Boolean);
+
+    // structured
+    const lines = [];
+    lines.push(`# Video ${i + 1}${meta.title ? " — " + meta.title : ""}`);
+    if (meta.description) lines.push(`Concept: ${meta.description}`);
+    lines.push("");
+    lines.push(`[FORMAT]`);
+    if (fmt.aspectRatio?.length) lines.push(`- Aspect: ${Array.isArray(fmt.aspectRatio) ? fmt.aspectRatio.join(", ") : fmt.aspectRatio}`);
+    if (fmt.duration?.length)    lines.push(`- Duration: ${Array.isArray(fmt.duration) ? fmt.duration.join(", ") : fmt.duration}`);
+    if (fmt.platforms?.length)   lines.push(`- Platforms: ${(fmt.platforms || []).join(", ")}`);
+    if (fmt.resolution)          lines.push(`- Resolution: ${fmt.resolution}`);
+
+    lines.push("");
+    lines.push(`[CREATIVE]`);
+    if (creative.mood)      lines.push(`- Mood: ${creative.mood}`);
+    if (creative.pacing)    lines.push(`- Pacing: ${creative.pacing}`);
+    if (creative.hookStyle) lines.push(`- Hook: ${creative.hookStyle}`);
+    if (creative.storyArc)  lines.push(`- Arc: ${creative.storyArc}`);
+    if (creative.ending)    lines.push(`- Ending: ${creative.ending}`);
+    if (creative.referenceLinks) lines.push(`- References: ${creative.referenceLinks.replace(/\n/g, " | ")}`);
+
+    if (cast.length) {
+      lines.push("");
+      lines.push(`[CAST]`);
+      cast.forEach(m => lines.push(`- ${m.name || "Model"}: ${describeModel(m)}`));
+    } else {
+      lines.push("");
+      lines.push(`[CAST] Product-only — no human model.`);
+    }
+
+    lines.push("");
+    lines.push(`[PRODUCT — ${pack.label}]`);
+    const pd = describeProduct(product, pack);
+    if (pd) lines.push(`- ${pd}`);
+    if (product._measurements) lines.push(`- Measurements: ${product._measurements}`);
+    if (product._photoFolder)  lines.push(`- Reference photo folder: ${product._photoFolder}`);
+
+    lines.push("");
+    lines.push(`[SCENE]`);
+    if (setting.location) lines.push(`- Location: ${setting.location}`);
+    if (setting.lighting) lines.push(`- Lighting: ${setting.lighting}`);
+    if (setting.palette)  lines.push(`- Palette: ${setting.palette}`);
+
+    lines.push("");
+    lines.push(`[CAMERA & MOTION]`);
+    if (motion.cameraMove)    lines.push(`- Camera: ${motion.cameraMove}`);
+    if (motion.subjectMotion) lines.push(`- Subject motion: ${motion.subjectMotion}`);
+    if (motion.speed)         lines.push(`- Speed: ${motion.speed}`);
+    if (motion.focus)         lines.push(`- Focus: ${motion.focus}`);
+
+    lines.push("");
+    lines.push(`[AUDIO]`);
+    if (motion.music)     lines.push(`- Music: ${motion.music}`);
+    if (motion.voiceover && motion.voiceover !== "None") {
+      lines.push(`- Voiceover: ${motion.voiceover}${motion.voiceoverLanguage ? ` (${motion.voiceoverLanguage})` : ""}`);
+    }
+    if (motion.captions)  lines.push(`- Captions: ${motion.captions}`);
+    if (motion.sfx)       lines.push(`- SFX: ${motion.sfx}`);
+
+    if (branding.headline || branding.cta || branding.offer || branding.logoPlacement) {
+      lines.push("");
+      lines.push(`[ON-SCREEN]`);
+      if (branding.headline) lines.push(`- Headline: "${branding.headline}"`);
+      if (branding.offer)    lines.push(`- Offer: ${branding.offer}`);
+      if (branding.cta)      lines.push(`- CTA: ${branding.cta}`);
+      if (branding.logoPlacement) lines.push(`- Logo: ${branding.logoPlacement}${branding.logoStyle ? " (" + branding.logoStyle + ")" : ""}`);
+    }
+
+    const structured = lines.join("\n");
+
+    // paragraph version — single dense block
+    const para = buildParagraphPrompt(brief, i, pack, fmt, creative, product, setting, motion, branding, cast);
+
+    return { structured, paragraph: para, title: meta.title || `Video ${i + 1}` };
+  });
+
+  // per-model prompts (character descriptions, useful for prompting character AI)
+  const modelPrompts = (d.models || []).map(m => ({
+    name: m.name || "Model",
+    text: describeModel(m),
+  }));
+
+  return { perVideo, modelPrompts };
+}
+
+function buildParagraphPrompt(brief, i, pack, fmt, creative, product, setting, motion, branding, cast) {
+  const parts = [];
+  const dur  = Array.isArray(fmt.duration) ? fmt.duration[0] : fmt.duration;
+  const asp  = Array.isArray(fmt.aspectRatio) ? fmt.aspectRatio[0] : fmt.aspectRatio;
+  const opener = [
+    dur && dur.toLowerCase(),
+    asp,
+    creative.mood && creative.mood.toLowerCase(),
+    "video"
+  ].filter(Boolean).join(" ");
+  if (opener) parts.push(`A ${opener}`);
+
+  const meta = brief.data.videos?.[i];
+  if (meta?.description) parts.push(meta.description.replace(/\.$/, ""));
+
+  if (product?.productType) parts.push(`featuring ${product.productType.toLowerCase()}`);
+  if (cast?.length) {
+    const m = cast[0];
+    const desc = describeModel(m);
+    if (desc) parts.push(`with ${desc}`);
+  }
+  if (setting.location) parts.push(`in a ${setting.location.toLowerCase()}`);
+  if (setting.lighting) parts.push(`under ${setting.lighting.toLowerCase()}`);
+  if (setting.palette)  parts.push(`${setting.palette.toLowerCase()} palette`);
+  if (motion.cameraMove) parts.push(`${motion.cameraMove.toLowerCase()} camera`);
+  if (motion.speed && motion.speed !== "Real-time") parts.push(motion.speed.toLowerCase());
+  if (motion.music && motion.music !== "None") parts.push(`${motion.music.toLowerCase()} music`);
+  if (motion.voiceover && motion.voiceover !== "None") parts.push(`${motion.voiceover.toLowerCase()} voiceover${motion.voiceoverLanguage ? " in " + motion.voiceoverLanguage : ""}`);
+  if (branding.headline) parts.push(`on-screen headline "${branding.headline}"`);
+  if (branding.cta) parts.push(`call-to-action "${branding.cta}"`);
+  return parts.join(", ") + ".";
+}
+
+async function copyToClipboard(text, btnEl) {
+  try {
+    await navigator.clipboard.writeText(text);
+    if (btnEl) {
+      const orig = btnEl.textContent;
+      btnEl.textContent = "Copied ✓";
+      btnEl.classList.add("copied");
+      setTimeout(() => { btnEl.textContent = orig; btnEl.classList.remove("copied"); }, 1500);
+    }
+  } catch {
+    alert("Clipboard blocked. Select & copy manually.");
+  }
+}
+
+function renderPrompts(ctx) {
+  const root = document.getElementById("wizardContent");
+  const { perVideo, modelPrompts } = compilePrompts(state.current);
+  root.innerHTML = `
+    <h2>Generated prompts</h2>
+    <p class="step-intro">
+      Auto-built from everything you entered above. Paste these into your AI video tool (Sora, Veo,
+      Higgsfield, Runway, etc.). Edit the prompt for fine-grained control — the form's job is to
+      get you 80% of the way there.
+    </p>
+    <div class="callout">
+      Two formats per video: <b>Structured</b> (easy to edit section-by-section) and
+      <b>Paragraph</b> (single dense block, drop straight into a prompt box).
+      Plus per-model <b>character prompts</b> below.
+    </div>
+    <div id="promptsContainer"></div>
+  `;
+  const container = root.querySelector("#promptsContainer");
+
+  if (perVideo.length === 0) {
+    container.innerHTML = `<div class="empty">No videos defined yet. Add videos in earlier steps to generate prompts.</div>`;
+    return;
+  }
+
+  perVideo.forEach((p, idx) => {
+    const block = document.createElement("div");
+    block.className = "prompt-block";
+    block.innerHTML = `
+      <h3>${idx + 1}. ${escapeHtml(p.title)}</h3>
+      <div class="prompt-pair">
+        <div class="prompt-card">
+          <div class="prompt-card-head">
+            <span class="prompt-card-label">Structured</span>
+            <button class="btn btn-ghost btn-sm copy-btn" data-text="structured">Copy</button>
+          </div>
+          <textarea readonly>${escapeHtml(p.structured)}</textarea>
+        </div>
+        <div class="prompt-card">
+          <div class="prompt-card-head">
+            <span class="prompt-card-label">Paragraph</span>
+            <button class="btn btn-ghost btn-sm copy-btn" data-text="paragraph">Copy</button>
+          </div>
+          <textarea readonly>${escapeHtml(p.paragraph)}</textarea>
+        </div>
+      </div>
+    `;
+    block.querySelectorAll(".copy-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const which = btn.dataset.text;
+        copyToClipboard(which === "structured" ? p.structured : p.paragraph, btn);
+      });
+    });
+    container.appendChild(block);
+  });
+
+  if (modelPrompts.length) {
+    const modBlock = document.createElement("div");
+    modBlock.className = "prompt-block";
+    modBlock.innerHTML = `
+      <h3 style="margin-top: 18px;">Character prompts (one per model)</h3>
+      <p class="muted" style="font-size: 13px; margin-bottom: 10px;">
+        Use these to lock the character look in a character-consistency tool (Midjourney character refs, Higgsfield character, etc.).
+      </p>
+      <div id="modelPromptList"></div>
+    `;
+    container.appendChild(modBlock);
+    const list = modBlock.querySelector("#modelPromptList");
+    modelPrompts.forEach(mp => {
+      const card = document.createElement("div");
+      card.className = "prompt-card";
+      card.innerHTML = `
+        <div class="prompt-card-head">
+          <span class="prompt-card-label">${escapeHtml(mp.name)}</span>
+          <button class="btn btn-ghost btn-sm copy-btn">Copy</button>
+        </div>
+        <textarea readonly>${escapeHtml(mp.text || "(model spec is empty)")}</textarea>
+      `;
+      card.querySelector(".copy-btn").addEventListener("click", (e) =>
+        copyToClipboard(mp.text, e.currentTarget));
+      list.appendChild(card);
+    });
+  }
+
+  // copy-all-at-once
+  const allBtn = document.createElement("button");
+  allBtn.className = "btn btn-primary";
+  allBtn.style.marginTop = "18px";
+  allBtn.textContent = "Copy ALL prompts (single text)";
+  allBtn.addEventListener("click", () => {
+    const all = perVideo.map(p => p.structured).join("\n\n---\n\n");
+    const modelText = modelPrompts.length ? "\n\n---\nCHARACTER PROMPTS\n\n" + modelPrompts.map(m => `${m.name}: ${m.text}`).join("\n\n") : "";
+    copyToClipboard(all + modelText, allBtn);
+  });
+  container.appendChild(allBtn);
 }
 
 // ---------- PRE-FLIGHT CHECKLIST STEP ----------

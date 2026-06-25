@@ -144,48 +144,45 @@ window.XMA_PACKS = (() => {
       ]
     },
 
-    modelModesty: {
-      title: "Model — Modesty & Cultural (confirmed FIRST)",
-      intro: "If a person appears in the video, modesty and cultural attributes are non-negotiable to get right. The hijab miss — a model generated without one when the client wanted one — is exactly what this section prevents.",
+    // Single consolidated model spec — used for each model the user creates.
+    // Order: Identity → Modesty (critical) → Appearance → Wardrobe & styling.
+    // Every field appears exactly once across the whole spec (no duplicates).
+    models: {
+      title: "Models",
+      intro: "Create every model that will appear in any video for this shoot. You can have one model used across all videos, or many models with different looks. On the Videos step you'll assign which models appear in which video.",
       fields: [
-        { key: "hasModel", label: "Will a human model appear in any video?", type: "select", required: true,
-          options: ["Yes","No — product only","Only hands / partial"] },
-        { key: "hijab", label: "Head covering", type: "select", required: true, critical: true,
-          options: ["Hijab","No hijab","Shayla","Turban","Niqab","Mixed (varies by video)"],
-          help: "Never assumed. Always asked. If unsure, ask the brand owner directly." },
-        { key: "modestyLevel", label: "Modest dress level", type: "select", required: true,
-          options: ["Fully covered","Arms covered","Abaya","Modern modest","Standard (no restrictions)"] },
-        { key: "skinInMotion", label: "Any extra skin exposure allowed when subject moves?", type: "select",
-          options: ["No — strict, never any extra exposure on movement","Yes — standard"],
-          help: "AI can reveal skin in motion that a still doesn't. If strict, we lock no-exposure rules." },
-        { key: "hijabStyle", label: "If hijab is yes, which style?", type: "select", options: HIJAB_STYLES,
-          help: "Hijab style varies a lot. Pin one down or attach a reference photo in the Assets step." },
-      ]
-    },
-
-    modelAppearance: {
-      title: "Model — Appearance",
-      intro: "Skin tone, nationality, hair, and expression. Choose the look that resonates with your audience.",
-      fields: [
-        { key: "skinTone", label: "Skin tone", type: "select", options: SKIN_TONES },
+        // --- Identity ---
+        { key: "gender", label: "Gender", type: "select",
+          options: ["Female","Male","Non-binary"] },
+        { key: "ageRange", label: "Age range", type: "select",
+          options: ["Young adult (18–24)","25–29","30s","40s","Mature (50+)","Mixed"] },
+        { key: "bodyType", label: "Body type", type: "select",
+          options: ["Slim","Average","Curvy","Plus","Athletic"] },
         { key: "nationality", label: "Nationality / look", type: "select", options: NATIONALITIES,
           help: "Pick the look that resonates with the audience's self-image." },
-        { key: "hair", label: "Hair (if uncovered)", type: "select", options: HAIR },
-        { key: "expression", label: "Expression / vibe", type: "select", options: EXPRESSIONS },
-        { key: "wardrobe", label: "Wardrobe style", type: "select", options: WARDROBE },
-      ]
-    },
 
-    modelOther: {
-      title: "Model — Other Attributes",
-      intro: "Gender, age, body, makeup, hands.",
-      fields: [
-        { key: "gender", label: "Gender", type: "select", options: ["Female","Male","Both","Non-featured"] },
-        { key: "ageRange", label: "Age range", type: "select", options: ["Young adult (18–24)","25–29","30s","40s","Mature (50+)","Mixed"] },
-        { key: "bodyType", label: "Body type", type: "select", options: ["Slim","Average","Curvy","Plus","Athletic","Mixed / representative"] },
-        { key: "makeup", label: "Makeup level on model", type: "select", options: ["Bare","Natural","Soft glam","Full glam","Editorial"] },
-        { key: "nailStyle", label: "Hands & nails (important for close-ups)", type: "select", options: NAIL_STYLES },
-        { key: "modelCount", label: "Number of models", type: "select", options: ["Solo","Two","Group"] },
+        // --- Modesty & cultural (critical block) ---
+        { key: "hijab", label: "Head covering", type: "select", critical: true,
+          options: ["No hijab","Hijab","Shayla","Turban","Niqab"],
+          help: "Never assumed. Always asked. If unsure, ask the brand owner directly." },
+        { key: "modestyLevel", label: "Modest dress level", type: "select",
+          options: ["Standard (no restrictions)","Modern modest","Arms covered","Fully covered","Abaya"] },
+        { key: "skinInMotion", label: "Any extra skin exposure on movement?", type: "select",
+          options: ["No — strict, never extra exposure on movement","Yes — standard"],
+          help: "AI can reveal skin in motion that a still doesn't. If strict we lock no-exposure rules." },
+        { key: "hijabStyle", label: "If hijab — which style?", type: "select", options: HIJAB_STYLES,
+          help: "Only fill if hijab is on. Style varies a lot — pin one down or attach a reference photo." },
+
+        // --- Appearance ---
+        { key: "skinTone", label: "Skin tone", type: "select", options: SKIN_TONES },
+        { key: "hair", label: "Hair (visible part — leave blank if fully covered)", type: "select", options: HAIR },
+        { key: "expression", label: "Default expression / vibe", type: "select", options: EXPRESSIONS },
+
+        // --- Wardrobe & styling (consolidated head-to-toe) ---
+        { key: "wardrobe", label: "Wardrobe style (head-to-body)", type: "select", options: WARDROBE },
+        { key: "makeup", label: "Makeup level", type: "select",
+          options: ["Bare","Natural","Soft glam","Full glam","Editorial"] },
+        { key: "nailStyle", label: "Nail style (matters for hand close-ups)", type: "select", options: NAIL_STYLES },
       ]
     },
 

@@ -41,22 +41,28 @@ function save() {
   flashAutosave();
 }
 
-// Migration: old briefs without projectId get wrapped in a default project.
+// Migrations: legacy briefs get a default project; old 3-section model data gets
+// collapsed into the new single data.models[] array.
 function migrate() {
+  // project wrapping
   const orphans = state.briefs.filter(b => !b.projectId);
   if (state.current && !state.current.projectId) orphans.push(state.current);
-  if (orphans.length === 0) return;
-  let defaultProject = state.projects.find(p => p.name === "My first project");
-  if (!defaultProject) {
-    defaultProject = {
-      id: uid(),
-      name: "My first project",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    state.projects.push(defaultProject);
+  if (orphans.length > 0) {
+    let defaultProject = state.projects.find(p => p.name === "My first project");
+    if (!defaultProject) {
+      defaultProject = {
+        id: uid(),
+        name: "My first project",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.projects.push(defaultProject);
+    }
+    orphans.forEach(b => { b.projectId = defaultProject.id; });
   }
-  orphans.forEach(b => { b.projectId = defaultProject.id; });
+  // model collapse
+  state.briefs.forEach(migrateModelsForBrief);
+  if (state.current) migrateModelsForBrief(state.current);
 }
 
 // ---------- PROJECT HELPERS ----------
@@ -119,9 +125,7 @@ const WIZARD_STEPS = [
   { id: "format",         title: "Format — per video",  render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.format) },
   { id: "creative",       title: "Creative — per video",render: ctx => renderPerVideoSection(ctx, ctx.pack.shared.creative) },
   { id: "product",        title: "Product — per video", render: renderProductPerVideo },
-  { id: "modelModesty",   title: "Model — modesty & cultural", render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelModesty) },
-  { id: "modelAppearance",title: "Model — appearance",  render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelAppearance) },
-  { id: "modelOther",     title: "Model — other",       render: ctx => renderFieldSection(ctx, ctx.pack.shared.modelOther) },
+  { id: "models",         title: "Models",              render: renderModels },
   { id: "setting",        title: "Setting, lighting, palette", render: ctx => renderFieldSection(ctx, ctx.pack.shared.setting) },
   { id: "motionAudio",    title: "Motion, camera & audio", render: ctx => renderFieldSection(ctx, ctx.pack.shared.motionAudio) },
   { id: "textBranding",   title: "On-screen text & branding", render: ctx => renderFieldSection(ctx, ctx.pack.shared.textBranding) },
@@ -693,6 +697,129 @@ function drawVideoBlocks(root, section, videos, extraRenderer, redraw) {
   });
 }
 
+// ---------- MODELS ----------
+// Each shoot can have multiple distinct models. A "model" is a complete person
+// spec (identity + modesty + appearance + wardrobe). Each video then picks which
+// models appear in it via a cast selector.
+function ensureModels() {
+  state.current.data.models = state.current.data.models || [];
+  return state.current.data.models;
+}
+
+function defaultModelName(i) { return `Model ${i + 1}`; }
+
+function addModel(seed) {
+  const list = ensureModels();
+  list.push({ id: uid(), name: defaultModelName(list.length), ...(seed || {}) });
+  save();
+}
+
+function removeModel(id) {
+  const list = ensureModels();
+  state.current.data.models = list.filter(m => m.id !== id);
+  // remove from any video cast assignments
+  (state.current.data.videos || []).forEach(v => {
+    if (Array.isArray(v.cast)) v.cast = v.cast.filter(cid => cid !== id);
+  });
+  save();
+}
+
+function renderModels(ctx) {
+  const root = document.getElementById("wizardContent");
+  const pack = ctx.pack;
+  const section = pack.shared.models;
+  const list = ensureModels();
+  // start with one blank model if none yet
+  if (list.length === 0) addModel();
+
+  root.innerHTML = `
+    <h2>${escapeHtml(section.title)}</h2>
+    <p class="step-intro">${escapeHtml(section.intro)}</p>
+    <div class="wizard-toolbar">
+      <button class="btn btn-primary btn-sm" id="addModelBtn">+ Add another model</button>
+      <button class="btn btn-ghost btn-sm" id="expandAllModels">Expand all</button>
+      <button class="btn btn-ghost btn-sm" id="collapseAllModels">Collapse all</button>
+    </div>
+    <div id="modelsContainer"></div>
+  `;
+
+  const container = root.querySelector("#modelsContainer");
+
+  function drawAll() {
+    container.innerHTML = "";
+    const data = ensureModels();
+    data.forEach((m, i) => {
+      const block = document.createElement("details");
+      block.className = "video-block model-block";
+      block.open = i === 0;
+      block.innerHTML = `
+        <summary>
+          <span class="vb-num">${i + 1}</span>
+          <span class="vb-label">${escapeHtml(m.name || defaultModelName(i))}</span>
+          ${data.length > 1 ? `<button class="btn-link vb-del" title="Remove this model">Remove</button>` : ""}
+        </summary>
+        <div class="vb-body"></div>
+      `;
+      const body = block.querySelector(".vb-body");
+
+      // Editable name at the top
+      const nameWrap = document.createElement("div");
+      nameWrap.className = "field";
+      nameWrap.innerHTML = `
+        <label class="field-label">Model name (shorthand) <span class="req">*</span></label>
+        <input type="text" class="model-name" value="${escapeAttr(m.name || "")}" placeholder='e.g. "Mariam — Khaleeji hijabi", "Founder", "Hand model A"' />
+        <div class="field-help">A label so you can pick this model on the Videos step. Doesn't need to be a real person's name.</div>
+      `;
+      const nameInput = nameWrap.querySelector(".model-name");
+      nameInput.addEventListener("input", () => {
+        m.name = nameInput.value;
+        block.querySelector(".vb-label").textContent = m.name || defaultModelName(i);
+        save();
+      });
+      body.appendChild(nameWrap);
+
+      // All shared model fields
+      section.fields.forEach(f => body.appendChild(renderField(f, m)));
+
+      // Remove button
+      const delBtn = block.querySelector(".vb-del");
+      if (delBtn) delBtn.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (!confirm(`Remove "${m.name || defaultModelName(i)}"? It will also be removed from any videos it's assigned to.`)) return;
+        removeModel(m.id);
+        drawAll();
+      });
+
+      container.appendChild(block);
+    });
+  }
+
+  drawAll();
+  root.querySelector("#addModelBtn").addEventListener("click", () => { addModel(); drawAll(); });
+  root.querySelector("#expandAllModels").addEventListener("click", () =>
+    root.querySelectorAll("details.model-block").forEach(d => d.open = true));
+  root.querySelector("#collapseAllModels").addEventListener("click", () =>
+    root.querySelectorAll("details.model-block").forEach(d => d.open = false));
+}
+
+// Migrate old model data (modelModesty / modelAppearance / modelOther) into a single
+// model in data.models on first load. Only runs once per brief.
+function migrateModelsForBrief(b) {
+  if (!b || !b.data) return;
+  if (Array.isArray(b.data.models) && b.data.models.length > 0) return;
+  const mm = b.data.modelModesty;
+  const ma = b.data.modelAppearance;
+  const mo = b.data.modelOther;
+  if (!mm && !ma && !mo) return;
+  const merged = { id: uid(), name: "Model 1", ...(mm || {}), ...(ma || {}), ...(mo || {}) };
+  delete merged.hasModel;
+  delete merged.modelCount;
+  b.data.models = [merged];
+  delete b.data.modelModesty;
+  delete b.data.modelAppearance;
+  delete b.data.modelOther;
+}
+
 // ---------- "YOUR VIDEOS" STEP ----------
 // Dedicated step right after Identity — name every video and write a one-liner
 // describing what should happen. Title & description are reused as the label of
@@ -723,8 +850,10 @@ function renderVideosList(ctx) {
   function draw() {
     const container = root.querySelector("#videosListContainer");
     const list = state.current.data.videos;
+    const models = ensureModels();
     container.innerHTML = "";
     list.forEach((meta, i) => {
+      meta.cast = Array.isArray(meta.cast) ? meta.cast : [];
       const card = document.createElement("div");
       card.className = "video-meta-card";
       card.innerHTML = `
@@ -741,9 +870,34 @@ function renderVideosList(ctx) {
           <label class="field-label">Description — what should happen in this video?</label>
           <textarea rows="3" class="vml-desc" placeholder="2–3 lines: the moment, the mood, the message. e.g. 'Close-up of the rose-gold solitaire spinning on a marble plinth, sparkle catches the light, ends on logo + CTA.'">${escapeHtml(meta.description)}</textarea>
         </div>
+        <div class="field">
+          <label class="field-label">Cast — which models appear?</label>
+          <div class="multi-options cast-chips"></div>
+          <div class="field-help">Leave empty if this video is product-only / hands-only. Models are defined on the Models step.</div>
+        </div>
       `;
       card.querySelector(".vml-title").addEventListener("input", e => { meta.title = e.target.value; save(); });
       card.querySelector(".vml-desc").addEventListener("input", e => { meta.description = e.target.value; save(); });
+
+      const castEl = card.querySelector(".cast-chips");
+      if (models.length === 0) {
+        castEl.innerHTML = `<span class="muted" style="font-size: 13px;">No models defined yet — add models on the <b>Models</b> step.</span>`;
+      } else {
+        models.forEach(mod => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "chip" + (meta.cast.includes(mod.id) ? " checked" : "");
+          chip.textContent = mod.name || "Untitled model";
+          chip.addEventListener("click", () => {
+            const idx = meta.cast.indexOf(mod.id);
+            if (idx >= 0) meta.cast.splice(idx, 1); else meta.cast.push(mod.id);
+            chip.classList.toggle("checked", meta.cast.includes(mod.id));
+            save();
+          });
+          castEl.appendChild(chip);
+        });
+      }
+
       const del = card.querySelector(".vmc-del");
       if (del) del.addEventListener("click", () => {
         if (!confirm(`Remove Video ${i + 1}? All its Format, Creative, and Product answers will be deleted.`)) return;
@@ -1080,6 +1234,7 @@ function renderBriefView() {
 
   // helper: render a per-video section
   const meta = d.videos || [];
+  const modelNameById = (id) => (d.models || []).find(m => m.id === id)?.name || "Unnamed model";
   const perVideoBlock = (sectionData, sectionConfig, extraRows) => {
     const vids = sectionData?.videos || [];
     if (!vids.length) return "<div class='muted'>(no entries)</div>";
@@ -1087,6 +1242,9 @@ function renderBriefView() {
       const m = meta[i] || {};
       const title = m.title || `Video ${i + 1}`;
       const desc = m.description ? `<div class="video-summary-desc">${escapeHtml(m.description)}</div>` : "";
+      const castLine = (Array.isArray(m.cast) && m.cast.length)
+        ? `<div class="kv"><div class="k">Cast</div><div class="v">${escapeHtml(m.cast.map(modelNameById).join(" · "))}</div></div>`
+        : "";
       const rows = sectionConfig.fields.map(f => {
         const v = vid?.[f.key];
         const extra = vid?.[f.key + "_other"];
@@ -1097,6 +1255,7 @@ function renderBriefView() {
       return `<div class="video-summary">
         <h3>${i + 1}. ${escapeHtml(title)}</h3>
         ${desc}
+        ${castLine}
         ${rows || "<div class='muted'>(no answers)</div>"}${extras}
       </div>`;
     }).join("");
@@ -1130,16 +1289,33 @@ function renderBriefView() {
       extra += `<div class="kv"><div class="k">10+ photos w/ scale ref</div><div class="v">${vid._photo10Confirmed ? "✓ confirmed" : "— not confirmed"}</div></div>`;
       return extra;
     })}
-    <h2>6 · Model — modesty</h2>${kvBlock(d.modelModesty, pack.shared.modelModesty)}
-    <h2>7 · Model — appearance</h2>${kvBlock(d.modelAppearance, pack.shared.modelAppearance)}
-    <h2>8 · Model — other</h2>${kvBlock(d.modelOther, pack.shared.modelOther)}
-    <h2>9 · Setting / lighting / palette</h2>${kvBlock(d.setting, pack.shared.setting)}
-    <h2>10 · Motion / camera / audio</h2>${kvBlock(d.motionAudio, pack.shared.motionAudio)}
-    <h2>11 · On-screen text & branding</h2>${kvBlock(d.textBranding, pack.shared.textBranding)}
+    <h2>6 · Models</h2>${
+      (d.models && d.models.length)
+        ? d.models.map((m, i) => `
+          <div class="video-summary">
+            <h3>${i + 1}. ${escapeHtml(m.name || `Model ${i + 1}`)}</h3>
+            ${kvBlock(m, pack.shared.models)}
+            ${(() => {
+              // which videos this model appears in
+              const apps = (d.videos || []).map((v, vi) =>
+                (Array.isArray(v.cast) && v.cast.includes(m.id))
+                  ? `Video ${vi + 1}${v.title ? " — " + v.title : ""}` : null
+              ).filter(Boolean);
+              return apps.length
+                ? `<div class="kv"><div class="k">Appears in</div><div class="v">${escapeHtml(apps.join(" · "))}</div></div>`
+                : `<div class="kv"><div class="k">Appears in</div><div class="v" style="color:var(--text-muted)">— not assigned to any video yet</div></div>`;
+            })()}
+          </div>
+        `).join("")
+        : "<div class='muted'>(no models defined)</div>"
+    }
+    <h2>7 · Setting / lighting / palette</h2>${kvBlock(d.setting, pack.shared.setting)}
+    <h2>8 · Motion / camera / audio</h2>${kvBlock(d.motionAudio, pack.shared.motionAudio)}
+    <h2>9 · On-screen text & branding</h2>${kvBlock(d.textBranding, pack.shared.textBranding)}
   `;
 
   if (d.assets && Object.keys(d.assets).length) {
-    html += `<h2>12 · Universal asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
+    html += `<h2>10 · Universal asset checklist</h2><table><thead><tr><th>Asset</th><th>Sent?</th></tr></thead><tbody>`;
     Object.entries(d.assets).filter(([k]) => k !== "_dropLink").forEach(([k, v]) => {
       const label = k.startsWith("extra_") ? k.replace(/^extra_/, "").replace(/_/g, " ") : k;
       html += `<tr><td>${escapeHtml(label)}</td><td>${v ? "✓" : "—"}</td></tr>`;
@@ -1149,7 +1325,7 @@ function renderBriefView() {
   }
 
   if (d.preflight) {
-    html += `<h2>13 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
+    html += `<h2>11 · Pre-flight checklist</h2><table><thead><tr><th>Item</th><th>Confirmed</th></tr></thead><tbody>`;
     Object.entries(d.preflight).forEach(([k,v]) => html += `<tr><td>${escapeHtml(k)}</td><td>${v ? "✓" : "—"}</td></tr>`);
     html += `</tbody></table>`;
   }

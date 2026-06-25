@@ -7,10 +7,13 @@ const STORAGE_KEY = "xma_shoot_pack_v2";
 
 // ---------- STATE ----------
 const state = {
-  briefs: [],        // submitted + in-progress saved briefs
-  current: null,     // currently active brief (in wizard)
+  projects: [],          // [{ id, name, createdAt, updatedAt }]
+  briefs: [],            // [{ id, projectId, category, ..., data: {...} }]
+  current: null,         // currently active brief (in wizard) — has projectId
+  activeProjectId: null, // project being viewed in detail screen
+  viewingBriefId: null,  // brief being viewed in printable view
   step: 0,
-  screen: "welcome",
+  screen: "projects",
 };
 
 function load() {
@@ -18,19 +21,82 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
-    state.briefs  = data.briefs  || [];
-    state.current = data.current || null;
-    state.step    = data.step    || 0;
+    state.projects = data.projects || [];
+    state.briefs   = data.briefs   || [];
+    state.current  = data.current  || null;
+    state.activeProjectId = data.activeProjectId || null;
+    state.step     = data.step     || 0;
+    migrate();
   } catch (e) { console.error("Failed to load state:", e); }
 }
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    projects: state.projects,
     briefs: state.briefs,
     current: state.current,
+    activeProjectId: state.activeProjectId,
     step: state.step,
   }));
   flashAutosave();
+}
+
+// Migration: old briefs without projectId get wrapped in a default project.
+function migrate() {
+  const orphans = state.briefs.filter(b => !b.projectId);
+  if (state.current && !state.current.projectId) orphans.push(state.current);
+  if (orphans.length === 0) return;
+  let defaultProject = state.projects.find(p => p.name === "My first project");
+  if (!defaultProject) {
+    defaultProject = {
+      id: uid(),
+      name: "My first project",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    state.projects.push(defaultProject);
+  }
+  orphans.forEach(b => { b.projectId = defaultProject.id; });
+}
+
+// ---------- PROJECT HELPERS ----------
+function createProject(name) {
+  const p = {
+    id: uid(),
+    name: (name || "").trim() || "Untitled project",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  state.projects.push(p);
+  save();
+  return p;
+}
+
+function getProject(id) { return state.projects.find(p => p.id === id); }
+
+function projectShoots(projectId) {
+  const arr = state.briefs.filter(b => b.projectId === projectId);
+  if (state.current && !state.current.submitted && state.current.projectId === projectId
+      && !arr.find(x => x.id === state.current.id)) {
+    arr.unshift(state.current);
+  }
+  return arr.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+}
+
+function renameProject(id, name) {
+  const p = getProject(id);
+  if (!p) return;
+  p.name = (name || "").trim() || "Untitled project";
+  p.updatedAt = new Date().toISOString();
+  save();
+}
+
+function deleteProject(id) {
+  state.projects = state.projects.filter(p => p.id !== id);
+  state.briefs = state.briefs.filter(b => b.projectId !== id);
+  if (state.current?.projectId === id) { state.current = null; state.step = 0; }
+  if (state.activeProjectId === id) state.activeProjectId = null;
+  save();
 }
 
 let autosaveTimer = null;
@@ -72,27 +138,138 @@ function showScreen(name) {
   document.querySelectorAll(".navlink").forEach(nl => {
     nl.classList.toggle("active", nl.dataset.screen === name);
   });
-  if (name === "welcome")   renderWelcome();
-  if (name === "list")      renderBriefList();
-  if (name === "wizard")    renderWizard();
-  if (name === "brief")     renderBriefView();
-  updateBriefCount();
+  if (name === "projects") renderProjects();
+  if (name === "project")  renderProject();
+  if (name === "wizard")   renderWizard();
+  if (name === "brief")    renderBriefView();
+  updateProjectCount();
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
-function updateBriefCount() {
-  const el = document.getElementById("briefCount");
-  if (el) el.textContent = state.briefs.length;
+function updateProjectCount() {
+  const el = document.getElementById("projectCount");
+  if (el) el.textContent = state.projects.length;
 }
 
 // nav clicks
 document.querySelectorAll(".navlink").forEach(nl => {
   nl.addEventListener("click", () => showScreen(nl.dataset.screen));
 });
-document.getElementById("brandHome").addEventListener("click", () => showScreen("welcome"));
+document.getElementById("brandHome").addEventListener("click", () => showScreen("projects"));
 
-// ---------- WELCOME / CATEGORY PICKER ----------
-function renderWelcome() {
+// ---------- PROJECTS LIST (landing) ----------
+function renderProjects() {
+  const list = document.getElementById("projectsList");
+  const empty = document.getElementById("projectsEmpty");
+  list.innerHTML = "";
+  if (state.projects.length === 0) { empty.style.display = ""; }
+  else {
+    empty.style.display = "none";
+    [...state.projects]
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+      .forEach(p => {
+        const shoots = projectShoots(p.id);
+        const submittedCount = shoots.filter(s => s.submitted).length;
+        const videoCount = shoots.reduce((acc, s) => acc + (Number(s.data?.identity?.videoCount) || 0), 0);
+        const card = document.createElement("div");
+        card.className = "brief-card";
+        card.innerHTML = `
+          <div class="bc-head">
+            <h3>${escapeHtml(p.name)}</h3>
+            <span class="pill pill-info">${shoots.length} shoot${shoots.length === 1 ? "" : "s"}</span>
+          </div>
+          <div class="bc-meta">
+            ${submittedCount} submitted · ${videoCount} total videos · updated ${new Date(p.updatedAt).toLocaleDateString()}
+          </div>
+        `;
+        card.addEventListener("click", () => { state.activeProjectId = p.id; save(); showScreen("project"); });
+        list.appendChild(card);
+      });
+  }
+
+  // resume strip — if an in-progress brief exists, link to its project
+  const resume = document.getElementById("resumeStrip");
+  if (state.current && !state.current.submitted) {
+    const pack = XMA_PACKS[state.current.category];
+    const proj = getProject(state.current.projectId);
+    document.getElementById("resumeMeta").textContent =
+      `${proj?.name || "Project"} — ${pack?.label || "Shoot"} — step ${state.step + 1}`;
+    resume.hidden = false;
+  } else {
+    resume.hidden = true;
+  }
+}
+
+document.getElementById("resumeContinue").addEventListener("click", () => showScreen("wizard"));
+document.getElementById("resumeDiscard").addEventListener("click", () => {
+  if (!confirm("Discard the in-progress shoot? This cannot be undone.")) return;
+  // remove unsaved current brief from briefs list as well
+  if (state.current) state.briefs = state.briefs.filter(b => b.id !== state.current.id);
+  state.current = null; state.step = 0; save();
+  renderProjects();
+});
+
+// ---------- SINGLE PROJECT DETAIL ----------
+function renderProject() {
+  const p = getProject(state.activeProjectId);
+  if (!p) { showScreen("projects"); return; }
+
+  const nameInput = document.getElementById("projectNameEdit");
+  nameInput.value = p.name;
+  nameInput.oninput = () => renameProject(p.id, nameInput.value);
+
+  document.getElementById("projectMeta").textContent =
+    `Created ${new Date(p.createdAt).toLocaleDateString()} · ${projectShoots(p.id).length} shoot(s)`;
+
+  // shoots list
+  const list = document.getElementById("shootsList");
+  const empty = document.getElementById("shootsEmpty");
+  list.innerHTML = "";
+  const shoots = projectShoots(p.id);
+  if (shoots.length === 0) empty.style.display = "";
+  else {
+    empty.style.display = "none";
+    shoots.forEach(s => {
+      const pack = XMA_PACKS[s.category];
+      const status = s.submitted
+        ? `<span class="pill pill-ok">Submitted</span>`
+        : `<span class="pill pill-warn">In progress</span>`;
+      const card = document.createElement("div");
+      card.className = "brief-card";
+      card.innerHTML = `
+        <div class="bc-head">
+          <h3>${pack?.icon || ""} ${escapeHtml(s.data?.identity?.businessName || pack?.label || "Untitled")}</h3>
+          ${status}
+        </div>
+        <div class="bc-meta">
+          ${escapeHtml(pack?.label || "")} · ${s.data?.identity?.videoCount || "?"} videos · updated ${new Date(s.updatedAt || s.createdAt).toLocaleDateString()}
+        </div>
+        <div style="margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-ghost btn-sm" data-action="view">View / print</button>
+          ${s.submitted ? "" : `<button class="btn btn-ghost btn-sm" data-action="resume">Resume</button>`}
+          <button class="btn btn-ghost btn-sm" data-action="download">Download</button>
+          <button class="btn btn-ghost btn-sm" data-action="delete">Delete</button>
+        </div>
+      `;
+      card.querySelector('[data-action="view"]').addEventListener("click", () => openBriefView(s.id));
+      const resumeBtn = card.querySelector('[data-action="resume"]');
+      if (resumeBtn) resumeBtn.addEventListener("click", () => {
+        state.current = s;
+        state.step = findResumeStep(s);
+        save(); showScreen("wizard");
+      });
+      card.querySelector('[data-action="download"]').addEventListener("click", () => downloadBriefJson(s));
+      card.querySelector('[data-action="delete"]').addEventListener("click", () =>
+        confirmAction("Delete shoot?", `“${pack?.label || "Shoot"}” will be permanently removed.`, () => {
+          state.briefs = state.briefs.filter(x => x.id !== s.id);
+          if (state.current?.id === s.id) { state.current = null; state.step = 0; }
+          save(); renderProject();
+        }));
+      list.appendChild(card);
+    });
+  }
+
+  // category picker for adding new shoot
   const grid = document.getElementById("categoryGrid");
   grid.innerHTML = "";
   Object.entries(XMA_PACKS).forEach(([key, pack]) => {
@@ -103,52 +280,79 @@ function renderWelcome() {
       <h3>${pack.label}</h3>
       <div class="tagline">${pack.tagline}</div>
     `;
-    card.addEventListener("click", () => startNewBrief(key));
+    card.addEventListener("click", () => startNewBrief(key, p.id));
     grid.appendChild(card);
   });
-
-  // resume strip — if there's an in-progress (non-submitted) current
-  const resume = document.getElementById("resumeStrip");
-  if (state.current && !state.current.submitted) {
-    const pack = XMA_PACKS[state.current.category];
-    document.getElementById("resumeMeta").textContent =
-      `${pack?.label || "Brief"} — ${state.current.data?.identity?.businessName || "Untitled"} — step ${state.step + 1}`;
-    resume.hidden = false;
-  } else {
-    resume.hidden = true;
-  }
 }
 
-document.getElementById("resumeContinue").addEventListener("click", () => {
-  showScreen("wizard");
+// project header buttons
+document.getElementById("projectBack").addEventListener("click", () => showScreen("projects"));
+document.getElementById("deleteProjectBtn").addEventListener("click", () => {
+  const p = getProject(state.activeProjectId);
+  if (!p) return;
+  confirmAction("Delete project?", `“${p.name}” and all its shoots will be permanently removed.`, () => {
+    deleteProject(p.id);
+    showScreen("projects");
+  });
 });
-document.getElementById("resumeDiscard").addEventListener("click", () => {
-  if (!confirm("Discard the in-progress brief? This cannot be undone.")) return;
-  state.current = null; state.step = 0; save();
-  renderWelcome();
+document.getElementById("exportProjectBtn").addEventListener("click", () => {
+  const p = getProject(state.activeProjectId);
+  if (!p) return;
+  const bundle = { project: p, shoots: projectShoots(p.id) };
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `xma_project_${p.name.replace(/[^a-z0-9]+/gi, "_")}_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
 });
 
-function startNewBrief(category) {
+// new project modal
+const newProjectModal = document.getElementById("newProjectModal");
+function openNewProjectModal() {
+  document.getElementById("newProjectName").value = "";
+  newProjectModal.hidden = false;
+  setTimeout(() => document.getElementById("newProjectName").focus(), 50);
+}
+document.getElementById("newProjectBtn").addEventListener("click", openNewProjectModal);
+document.getElementById("newProjectTopBtn").addEventListener("click", openNewProjectModal);
+document.getElementById("cancelProjectBtn").addEventListener("click", () => newProjectModal.hidden = true);
+document.getElementById("createProjectBtn").addEventListener("click", () => {
+  const name = document.getElementById("newProjectName").value;
+  const p = createProject(name);
+  newProjectModal.hidden = true;
+  state.activeProjectId = p.id; save();
+  showScreen("project");
+});
+document.getElementById("newProjectName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("createProjectBtn").click();
+});
+
+function startNewBrief(category, projectId) {
   if (state.current && !state.current.submitted) {
-    if (!confirm("You have an in-progress brief. Starting a new one will discard it. Continue?")) return;
+    if (!confirm("You have an in-progress shoot. Starting a new one will discard the unsaved one. Continue?")) return;
   }
   state.current = {
     id: uid(),
+    projectId,
     category,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     submitted: false,
     submittedAt: null,
-    data: { videoMap: [], assets: {}, preflight: {} },
+    data: { videos: [], assets: {}, preflight: {} },
   };
+  state.briefs.push(state.current);  // tracked from the start so the project shows it
   state.step = 0;
+  // bump project updatedAt
+  const proj = getProject(projectId);
+  if (proj) { proj.updatedAt = new Date().toISOString(); }
   save();
   showScreen("wizard");
 }
 
 // ---------- WIZARD RENDERER ----------
 function renderWizard() {
-  if (!state.current) { showScreen("welcome"); return; }
+  if (!state.current) { showScreen("projects"); return; }
   const pack = XMA_PACKS[state.current.category];
   const step = WIZARD_STEPS[state.step];
   const ctx = { pack, brief: state.current };
@@ -179,8 +383,13 @@ document.getElementById("wizardNext").addEventListener("click", () => {
 });
 document.getElementById("wizardSaveExit").addEventListener("click", () => {
   save();
-  alert("Saved. You can resume later from the welcome screen or Saved briefs.");
-  showScreen("welcome");
+  alert("Saved. You can resume from this project's page any time.");
+  if (state.current?.projectId) {
+    state.activeProjectId = state.current.projectId;
+    showScreen("project");
+  } else {
+    showScreen("projects");
+  }
 });
 
 // ---------- FIELD RENDERER ----------
@@ -703,10 +912,13 @@ function submitBrief() {
   state.current.submitted = true;
   state.current.submittedAt = new Date().toISOString();
   state.current.updatedAt = state.current.submittedAt;
-  // move into briefs list (or update existing)
+  // ensure brief is in the briefs list
   const idx = state.briefs.findIndex(b => b.id === state.current.id);
   if (idx >= 0) state.briefs[idx] = state.current;
   else state.briefs.push(state.current);
+  // bump parent project's updatedAt
+  const proj = getProject(state.current.projectId);
+  if (proj) proj.updatedAt = state.current.submittedAt;
   save();
   showScreen("submitted");
 }
@@ -726,59 +938,6 @@ document.getElementById("emailBriefBtn").addEventListener("click", () => {
   window.location.href = `mailto:hello@xma.agency?subject=${subj}&body=${body}`;
 });
 
-// ---------- SAVED BRIEFS LIST ----------
-function renderBriefList() {
-  const list = document.getElementById("briefList");
-  const empty = document.getElementById("briefEmpty");
-  list.innerHTML = "";
-  const items = [...state.briefs].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-  if (state.current && !state.current.submitted) {
-    items.unshift(state.current);
-  }
-  if (items.length === 0) { empty.style.display = ""; return; }
-  empty.style.display = "none";
-
-  items.forEach(b => {
-    const pack = XMA_PACKS[b.category];
-    const card = document.createElement("div");
-    card.className = "brief-card";
-    const status = b.submitted
-      ? `<span class="pill pill-ok">Submitted</span>`
-      : `<span class="pill pill-warn">In progress</span>`;
-    card.innerHTML = `
-      <div class="bc-head">
-        <h3>${pack?.icon || ""} ${escapeHtml(b.data?.identity?.businessName || "Untitled")}</h3>
-        ${status}
-      </div>
-      <div class="bc-meta">
-        ${escapeHtml(pack?.label || "")} · ${b.data?.identity?.videoCount || "?"} videos · updated ${new Date(b.updatedAt || b.createdAt).toLocaleDateString()}
-      </div>
-      <div style="margin-top: 10px; display: flex; gap: 6px;">
-        <button class="btn btn-ghost btn-sm" data-action="view">View / print</button>
-        ${b.submitted ? "" : `<button class="btn btn-ghost btn-sm" data-action="resume">Resume</button>`}
-        <button class="btn btn-ghost btn-sm" data-action="download">Download</button>
-        <button class="btn btn-ghost btn-sm" data-action="delete">Delete</button>
-      </div>
-    `;
-    card.querySelector('[data-action="view"]').addEventListener("click", () => openBriefView(b.id));
-    const resumeBtn = card.querySelector('[data-action="resume"]');
-    if (resumeBtn) resumeBtn.addEventListener("click", () => {
-      state.current = b;
-      // figure out step roughly — find first step missing data
-      state.step = findResumeStep(b);
-      save(); showScreen("wizard");
-    });
-    card.querySelector('[data-action="download"]').addEventListener("click", () => downloadBriefJson(b));
-    card.querySelector('[data-action="delete"]').addEventListener("click", () =>
-      confirmAction("Delete brief?", `“${b.data?.identity?.businessName || "Untitled"}” will be permanently removed.`, () => {
-        state.briefs = state.briefs.filter(x => x.id !== b.id);
-        if (state.current?.id === b.id) { state.current = null; state.step = 0; }
-        save(); renderBriefList(); updateBriefCount();
-      }));
-    list.appendChild(card);
-  });
-}
-
 function findResumeStep(b) {
   for (let i = 0; i < WIZARD_STEPS.length; i++) {
     const step = WIZARD_STEPS[i];
@@ -788,22 +947,43 @@ function findResumeStep(b) {
   return WIZARD_STEPS.length - 1;
 }
 
-document.getElementById("newBriefBtn").addEventListener("click", () => showScreen("welcome"));
-document.getElementById("importBriefBtn").addEventListener("click", () => document.getElementById("importFile").click());
+// Import: accepts either a single brief, an array of briefs, or a project bundle
+// (the format produced by Export project: { project, shoots }).
 document.getElementById("importFile").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const data = JSON.parse(await f.text());
-    if (Array.isArray(data)) data.forEach(d => importOneBrief(d));
-    else importOneBrief(data);
-    save(); renderBriefList(); updateBriefCount();
-    alert("Brief imported.");
+    if (data && data.project && Array.isArray(data.shoots)) {
+      // project bundle
+      if (!data.project.id) data.project.id = uid();
+      const existing = state.projects.findIndex(p => p.id === data.project.id);
+      if (existing >= 0) state.projects[existing] = data.project; else state.projects.push(data.project);
+      data.shoots.forEach(s => {
+        s.projectId = data.project.id;
+        const idx = state.briefs.findIndex(b => b.id === s.id);
+        if (idx >= 0) state.briefs[idx] = s; else state.briefs.push(s);
+      });
+      alert(`Project "${data.project.name}" with ${data.shoots.length} shoot(s) imported.`);
+    } else if (Array.isArray(data)) {
+      data.forEach(d => importOneBrief(d));
+      alert(`${data.length} brief(s) imported.`);
+    } else {
+      importOneBrief(data);
+      alert("Brief imported.");
+    }
+    save();
+    showScreen(state.screen);
   } catch { alert("Could not parse that file."); }
   e.target.value = "";
 });
 
 function importOneBrief(d) {
   if (!d.id) d.id = uid();
+  if (!d.projectId) {
+    // create a default project on the fly
+    const p = createProject(d.data?.identity?.businessName || "Imported");
+    d.projectId = p.id;
+  }
   const idx = state.briefs.findIndex(b => b.id === d.id);
   if (idx >= 0) state.briefs[idx] = d; else state.briefs.push(d);
 }
@@ -817,7 +997,7 @@ function openBriefView(id) {
 
 function renderBriefView() {
   const b = state.briefs.find(x => x.id === viewingBriefId) || state.current;
-  if (!b) { showScreen("list"); return; }
+  if (!b) { showScreen("projects"); return; }
   const pack = XMA_PACKS[b.category];
   const content = document.getElementById("briefContent");
   const d = b.data || {};
@@ -856,10 +1036,12 @@ function renderBriefView() {
     }).join("");
   };
 
+  const projName = getProject(b.projectId)?.name || "(no project)";
   let html = `
     <h1>${pack.icon} ${escapeHtml(idn.businessName || "Untitled")} — ${escapeHtml(pack.label)} Shoot Brief</h1>
     <div class="brief-meta">
-      Brief ID: ${b.id} · Status: ${b.submitted ? "Submitted " + new Date(b.submittedAt).toLocaleString() : "In progress"} ·
+      Project: <b>${escapeHtml(projName)}</b> · Brief ID: ${b.id} ·
+      Status: ${b.submitted ? "Submitted " + new Date(b.submittedAt).toLocaleString() : "In progress"} ·
       ${idn.videoCount || "?"} videos · Tier: ${escapeHtml(idn.tier || "—")} · Deadline: ${escapeHtml(idn.deadline || "—")}
     </div>
 
@@ -912,7 +1094,11 @@ function renderBriefView() {
   content.innerHTML = html;
 }
 
-document.getElementById("briefBack").addEventListener("click", () => showScreen("list"));
+document.getElementById("briefBack").addEventListener("click", () => {
+  const b = state.briefs.find(x => x.id === viewingBriefId) || state.current;
+  if (b?.projectId) { state.activeProjectId = b.projectId; showScreen("project"); }
+  else showScreen("projects");
+});
 document.getElementById("briefPrint").addEventListener("click", () => window.print());
 document.getElementById("briefDownload").addEventListener("click", () => {
   const b = state.briefs.find(x => x.id === viewingBriefId) || state.current;
@@ -971,5 +1157,5 @@ function formatVal(v) {
 // ---------- INIT ----------
 load();
 document.querySelectorAll(".modal").forEach(m => { m.hidden = true; });
-showScreen("welcome");
-updateBriefCount();
+showScreen("projects");
+updateProjectCount();

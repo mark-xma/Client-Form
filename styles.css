@@ -121,6 +121,28 @@ main { padding: 28px 24px; max-width: 880px; margin: 0 auto; }
   flex-wrap: wrap;
 }
 
+/* project detail header */
+.project-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 4px; flex-wrap: wrap;
+}
+.project-name-input {
+  flex: 1; min-width: 260px;
+  border: 1.5px solid transparent !important;
+  background: transparent !important;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  padding: 6px 8px !important;
+  color: var(--text);
+}
+.project-name-input:focus {
+  border-color: var(--primary) !important;
+  background: var(--surface) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+.project-name-input:hover { background: var(--surface-2) !important; }
+.project-header-actions { display: flex; gap: 8px; }
+
 /* ---------- wizard ---------- */
 .wizard-head {
   display: flex; justify-content: space-between; align-items: center;

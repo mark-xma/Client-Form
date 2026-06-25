@@ -13,44 +13,63 @@
     <div class="logo-mark">XMA</div>
     <div>
       <div class="brand-title">Shoot Pack</div>
-      <div class="brand-sub">Client onboarding system</div>
+      <div class="brand-sub">Project &amp; shoot system</div>
     </div>
   </div>
   <nav class="topnav">
-    <button class="navlink" data-screen="welcome">New brief</button>
-    <button class="navlink" data-screen="list">Saved briefs <span class="badge" id="briefCount">0</span></button>
+    <button class="navlink" data-screen="projects">All projects <span class="badge" id="projectCount">0</span></button>
+    <button class="btn btn-primary btn-sm" id="newProjectTopBtn">+ New project</button>
   </nav>
 </header>
 
 <main id="main">
 
-  <!-- ================ WELCOME / CATEGORY PICKER ================ -->
-  <section class="screen" id="screen-welcome">
-    <div class="welcome">
-      <h1>Welcome to your shoot brief</h1>
-      <p class="lead">
-        We'll walk through every decision needed to film your videos — from look &amp; feel to the exact
-        size of every product. Takes about <b>10–15 minutes</b>. You can save and come back any time.
-      </p>
-      <p class="muted">
-        <b>The one principle:</b> if it appears on screen, it was chosen on purpose — never guessed.
-        Every section is a decision to confirm. By the end, our creative team gets a single, unambiguous brief.
-      </p>
-
-      <h2 style="margin-top: 28px;">Pick the category for this shoot</h2>
-      <div class="category-grid" id="categoryGrid"></div>
-
-      <div class="resume-strip" id="resumeStrip" hidden>
-        <div>
-          <b>Resume your in-progress brief?</b>
-          <div class="muted" id="resumeMeta"></div>
-        </div>
-        <div>
-          <button class="btn btn-ghost" id="resumeDiscard">Start fresh</button>
-          <button class="btn btn-primary" id="resumeContinue">Continue</button>
-        </div>
+  <!-- ================ PROJECTS LIST (landing) ================ -->
+  <section class="screen" id="screen-projects">
+    <div class="view-header">
+      <h1>Projects</h1>
+      <div>
+        <button class="btn btn-primary" id="newProjectBtn">+ New project</button>
       </div>
     </div>
+    <div class="callout">
+      A <b>Project</b> is a client engagement that can hold multiple shoots over time —
+      e.g. Jewelry now, Perfume next month. Same client info reused across every shoot inside it.
+    </div>
+    <div class="grid" id="projectsList"></div>
+    <div class="empty" id="projectsEmpty">No projects yet. Click <b>+ New project</b> to start.</div>
+
+    <div class="resume-strip" id="resumeStrip" hidden>
+      <div>
+        <b>Resume your in-progress shoot?</b>
+        <div class="muted" id="resumeMeta"></div>
+      </div>
+      <div>
+        <button class="btn btn-ghost" id="resumeDiscard">Discard</button>
+        <button class="btn btn-primary" id="resumeContinue">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================ SINGLE PROJECT DETAIL ================ -->
+  <section class="screen" id="screen-project" hidden>
+    <div class="project-header">
+      <button class="btn btn-link" id="projectBack">← All projects</button>
+      <input type="text" id="projectNameEdit" class="project-name-input" placeholder="Project name" />
+      <div class="project-header-actions">
+        <button class="btn btn-ghost btn-sm" id="exportProjectBtn">Export project</button>
+        <button class="btn btn-ghost btn-sm" id="deleteProjectBtn">Delete</button>
+      </div>
+    </div>
+    <p class="muted" id="projectMeta"></p>
+
+    <h2 style="margin-top: 24px;">Shoots in this project</h2>
+    <div class="grid" id="shootsList"></div>
+    <div class="empty" id="shootsEmpty">No shoots in this project yet. Add one below.</div>
+
+    <h2 style="margin-top: 28px;">+ Add a new shoot</h2>
+    <p class="muted">Pick a category to start a new shoot brief inside this project.</p>
+    <div class="category-grid" id="categoryGrid"></div>
   </section>
 
   <!-- ================ WIZARD ================ -->
@@ -109,25 +128,25 @@
     <div id="briefContent" class="brief-content"><!-- rendered --></div>
   </section>
 
-  <!-- ================ SAVED BRIEFS LIST ================ -->
-  <section class="screen" id="screen-list" hidden>
-    <div class="view-header">
-      <h1>Saved briefs</h1>
-      <div>
-        <input type="file" id="importFile" accept="application/json" hidden />
-        <button class="btn btn-ghost" id="importBriefBtn">Import brief</button>
-        <button class="btn btn-primary" id="newBriefBtn">+ New brief</button>
-      </div>
-    </div>
-    <div class="callout">
-      <b>Briefs are saved on this device only.</b> To share with someone else, open the brief and use
-      <b>Download JSON</b> — they can <b>Import brief</b> here to load it.
-    </div>
-    <div class="grid" id="briefList"></div>
-    <div class="empty" id="briefEmpty">No briefs yet. Click <b>+ New brief</b> to start.</div>
-  </section>
+  <!-- ================ IMPORT (hidden) ================ -->
+  <input type="file" id="importFile" accept="application/json" hidden />
 
 </main>
+
+<!-- new project modal -->
+<div class="modal" id="newProjectModal" hidden>
+  <div class="modal-body">
+    <button type="button" class="modal-close" data-close="newProjectModal" aria-label="Close">×</button>
+    <h2>New project</h2>
+    <p class="muted">Give it a name you'll remember (e.g. "NICHE Q3 2026 Launch").</p>
+    <label class="field-label">Project name</label>
+    <input type="text" id="newProjectName" placeholder="e.g. NICHE Q3 2026 Launch" />
+    <div class="actions">
+      <button class="btn btn-ghost" id="cancelProjectBtn">Cancel</button>
+      <button class="btn btn-primary" id="createProjectBtn">Create project</button>
+    </div>
+  </div>
+</div>
 
 <!-- delete confirm modal -->
 <div class="modal" id="confirmModal" hidden>

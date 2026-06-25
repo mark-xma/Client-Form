@@ -86,7 +86,7 @@ window.XMA_PACKS = (() => {
 
     identity: {
       title: "Project Identity",
-      intro: "Who's the brand, who approves, and what's the goal for this batch.",
+      intro: "Who's the brand, who approves, and what's the goal for this batch. → Fill this WITH the client on an onboarding call, not by sending the link for them to fill alone.",
       fields: [
         { key: "businessName", label: "Business / trading name", type: "text", required: true },
         { key: "contactName",  label: "Primary contact (name + role)", type: "text", required: true },
@@ -155,9 +155,9 @@ window.XMA_PACKS = (() => {
           help: "Never assumed. Always asked. If unsure, ask the brand owner directly." },
         { key: "modestyLevel", label: "Modest dress level", type: "select", required: true,
           options: ["Fully covered","Arms covered","Abaya","Modern modest","Standard (no restrictions)"] },
-        { key: "skinInMotion", label: "Skin exposure rules in motion", type: "select",
-          options: ["Strict — no extra exposure when subject moves","Standard"],
-          help: "AI can reveal skin in motion that a still doesn't show. Flag if strict." },
+        { key: "skinInMotion", label: "Any extra skin exposure allowed when subject moves?", type: "select",
+          options: ["No — strict, never any extra exposure on movement","Yes — standard"],
+          help: "AI can reveal skin in motion that a still doesn't. If strict, we lock no-exposure rules." },
         { key: "hijabStyle", label: "If hijab is yes, which style?", type: "select", options: HIJAB_STYLES,
           help: "Hijab style varies a lot. Pin one down or attach a reference photo in the Assets step." },
       ]
@@ -204,15 +204,20 @@ window.XMA_PACKS = (() => {
       intro: "How the camera moves, how the subject moves, and what we hear.",
       fields: [
         { key: "cameraMove", label: "Camera movement", type: "select",
-          options: ["Static","Slow push","Orbit","Handheld","Dynamic / multi-angle"] },
+          options: ["Static","Slow push","Orbit","Handheld","Dynamic / multi-angle","Crane / tilt","Tracking / dolly","POV"] },
         { key: "subjectMotion", label: "Subject motion", type: "select",
-          options: ["Still","Subtle","Active","Product rotation"] },
+          options: ["Still","Subtle","Active","Product rotation","Walking","Dancing","Hands only"] },
         { key: "speed", label: "Speed", type: "select",
-          options: ["Real-time","Slow-mo","Sped-up","Mix"] },
+          options: ["Real-time","Slow-mo","Sped-up","Mix","Time-lapse","Hyper-lapse"] },
         { key: "focus", label: "Focus style", type: "select",
-          options: ["Product sharp","Depth blur","Rack focus"] },
+          options: ["Product sharp","Depth blur (bokeh)","Rack focus","Hyperfocus / everything sharp"] },
         { key: "music", label: "Music style", type: "select",
-          options: ["None","Luxury / cinematic","Upbeat","Ambient","Trend-based"] },
+          options: [
+            "None","Luxury / cinematic","Upbeat","Ambient","Trend-based",
+            "Hip-hop / trap","Electronic / EDM","Lo-fi","Pop","Classical / orchestral",
+            "Acoustic","Arabic / Khaleeji","World / ethnic","Jazz","R&B / soul",
+            "Rock / indie","Vocal-driven","No vocals","Sound design only"
+          ] },
         { key: "voiceover", label: "Voiceover", type: "select",
           options: ["None","Female","Male","Multiple"] },
         { key: "voiceoverLanguage", label: "If VO, language & accent", type: "text",
@@ -221,7 +226,7 @@ window.XMA_PACKS = (() => {
           options: ["Required","Optional","Not needed"], required: true,
           help: "Most social plays muted. Default to required." },
         { key: "captionLanguages", label: "Caption languages", type: "multi",
-          options: ["English","Arabic","Persian / Farsi","Other"] },
+          options: ["English","Arabic","Persian / Farsi"] },
         { key: "sfx", label: "Sound effects / ASMR", type: "select",
           options: ["None","Subtle","Prominent","ASMR-focused"] },
       ]
@@ -309,6 +314,7 @@ window.XMA_PACKS = (() => {
         { asset: "Metal tone reference", spec: "Exact tone (real photo if possible)", why: "Top miss in jewelry" },
         { asset: "Stone details", spec: "Carat, cut, color, clarity", why: "Accuracy & sparkle" },
         { asset: "On-body reference", spec: "Worn (hand/ear/neck)", why: "Placement & scale" },
+        { asset: "Packaging photos", spec: "Box / pouch / case as it ships", why: "If packaging appears on screen it must match reality (Lord Milano lesson)" },
         { asset: "Certificates", spec: "GIA / authenticity if shown", why: "Trust elements" },
         { asset: "Set groupings", spec: "Pieces worn together", why: "Layering order" },
         { asset: "Engraving artwork", spec: "If detail visible", why: "Legibility" },
@@ -393,7 +399,7 @@ window.XMA_PACKS = (() => {
         { asset: "Cap / detail shots", spec: "Hero distinctive caps", why: "Brand signature" },
         { asset: "Scent notes", spec: "Top / heart / base", why: "Drives visual mood" },
         { asset: "Ingredient props", spec: "Florals, oud, spices", why: "Evokes scent" },
-        { asset: "Packaging / box", spec: "Outer box, inserts", why: "Gifting & unboxing" },
+        { asset: "Packaging / outer box", spec: "Box, sleeve, inserts as it ships", why: "If packaging appears on screen it must match reality (Lord Milano lesson)" },
         { asset: "Mood references", spec: "Atmosphere wanted", why: "Conveys invisible product" },
       ],
       preflightExtras: [
@@ -474,7 +480,7 @@ window.XMA_PACKS = (() => {
         { asset: "Texture macro images", spec: "Close-up of finish", why: "Texture must read on screen" },
         { asset: "Application reference", spec: "Real photo of finished look", why: "Application style matches" },
         { asset: "Skin tone target", spec: "Model skin matches buyer", why: "Audience resonance" },
-        { asset: "Packaging detail", spec: "Cap, applicator, base", why: "Brand signatures" },
+        { asset: "Packaging photos", spec: "Outer box, cap, applicator, base as it ships", why: "If packaging appears on screen it must match reality (Lord Milano lesson)" },
       ],
       preflightExtras: [
         "Exact shade / hex per video confirmed",
@@ -489,6 +495,59 @@ window.XMA_PACKS = (() => {
         "Wrong SKU shown — bottle/tube/pen photo per video.",
         "Label unreadable when it must be — flag legibility.",
         "Model's makeup contradicts the featured product — match look to SKU.",
+      ],
+    },
+
+    // ============ GENERIC (broad / static ads / other products) ============
+    generic: {
+      label: "Generic / Other",
+      icon: "🎬",
+      tagline: "Static ads, broad campaigns, services, or products outside the 3 niches.",
+      heroNote: "Use this when the work doesn't fit Jewelry / Perfume / Cosmetics — static graphics, brand intros, services, or a mix.",
+      shared: SHARED,
+      product: {
+        title: "Product / Subject",
+        intro: "Describe what we're filming or designing. Be specific — vague briefs cause vague output.",
+        fields: [
+          { key: "deliverableType", label: "Type of deliverable", type: "select", required: true, critical: true, options: [
+            "Static ad / graphic","Carousel post (multi-frame)","Product video","Service promo video",
+            "Founder / testimonial","Event coverage","Brand intro","Explainer / how-to","UGC-style ad",
+            "Voiceover-led video","Animation / motion graphics","Print-style banner"
+          ]},
+          { key: "productName", label: "Product or service name", type: "text", required: true },
+          { key: "productDesc", label: "Describe it in one sentence", type: "textarea", required: true,
+            placeholder: "What is it, what does it do, who is it for" },
+          { key: "uniqueAngle", label: "What makes it different from competitors?", type: "textarea" },
+          { key: "keyMessage", label: "The single message we want the viewer to remember", type: "text", required: true,
+            placeholder: "e.g. \"30-day money-back guarantee\"" },
+          { key: "visualSignature", label: "Visual signature / hero element", type: "text",
+            placeholder: "e.g. logo lockup, packaging close-up, founder face, product in hand" },
+          { key: "physicalReference", label: "Is there a physical product?", type: "select",
+            options: ["Yes — physical product","No — service / digital","Mixed"] },
+        ]
+      },
+      sizingRows: [
+        { item: "Physical product", measure: "Best-fit dimensions if applicable", units: "mm / cm / ml / kg" },
+        { item: "Packaging", measure: "Box / sleeve dimensions", units: "cm" },
+        { item: "Static ad format", measure: "Output size", units: "px (1080×1080, 1080×1920, etc.)" },
+      ],
+      assetExtras: [
+        { asset: "Reference images", spec: "Hi-res, multiple angles or moments", why: "Foundation of every shot" },
+        { asset: "Product packaging", spec: "Box / wrap / case if shown", why: "Must match real-life packaging" },
+        { asset: "Brand assets", spec: "Logos, fonts, palette", why: "Output stays on-brand" },
+        { asset: "Existing campaign references", spec: "What you've done before that worked", why: "Tone calibration" },
+      ],
+      preflightExtras: [
+        "Deliverable type confirmed (static / video / mix)",
+        "Reference images received",
+        "Key message locked in writing",
+        "Brand assets received",
+      ],
+      faultsToAvoid: [
+        "Vague description — no specifics for AI to work from.",
+        "No real-world reference — risks wrong scale, wrong vibe, generic output.",
+        "Key message not agreed — different team members chase different angles.",
+        "Brand assets missing — output is off-brand and needs full redo.",
       ],
     },
   };

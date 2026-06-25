@@ -128,6 +128,26 @@
     <div id="briefContent" class="brief-content"><!-- rendered --></div>
   </section>
 
+  <!-- ================ CREATOR REVIEW CHECKLIST (QA) ================ -->
+  <section class="screen" id="screen-qa" hidden>
+    <div class="brief-toolbar no-print">
+      <button class="btn btn-ghost" id="qaBack">← Back to project</button>
+      <div>
+        <button class="btn btn-ghost" id="qaPrintBtn">Print checklist</button>
+      </div>
+    </div>
+    <div class="qa-head">
+      <h1 id="qaTitle">Creator review checklist</h1>
+      <p class="muted" id="qaSubtitle"></p>
+    </div>
+    <div class="callout">
+      <b>Before submitting a video for client review</b>, work through this checklist per video.
+      Each watch focuses on one thing — pronunciation, then lip sync, then hands, etc. — so nothing gets missed.
+      The "gorilla effect": you'll miss what you're not specifically looking for.
+    </div>
+    <div id="qaContainer"></div>
+  </section>
+
   <!-- ================ IMPORT (hidden) ================ -->
   <input type="file" id="importFile" accept="application/json" hidden />
 

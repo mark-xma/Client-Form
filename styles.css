@@ -220,6 +220,13 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; min-height: 80px; }
 select { cursor: pointer; }
 
+/* "Other (specify)" follow-up text input */
+.field-other {
+  margin-top: 6px;
+  background: #fffbeb !important;
+  border-color: var(--warning) !important;
+}
+
 /* multi-select chips */
 .multi-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -336,6 +343,77 @@ select { cursor: pointer; }
 }
 .brief-video-list li b { color: var(--text); }
 .brief-video-list .muted { font-size: 13px; margin-top: 2px; }
+
+/* ===== Creator Review Checklist (QA) ===== */
+.qa-head { margin-bottom: 14px; }
+.qa-video-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px;
+  margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.qa-vid-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.qa-vid-head h2 { font-size: 18px; }
+.qa-status { padding: 6px 10px; font-size: 13px; border-radius: 6px; }
+.qa-progress { font-size: 12px; margin: 6px 0 14px; }
+
+.qa-category {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px; padding: 0;
+}
+.qa-category summary {
+  cursor: pointer; padding: 12px 14px;
+  display: flex; align-items: center; gap: 10px;
+  list-style: none; font-size: 14px;
+}
+.qa-category summary::-webkit-details-marker { display: none; }
+.qa-category summary::before {
+  content: "▸"; color: var(--text-muted); font-size: 12px;
+  transition: transform 0.15s;
+}
+.qa-category[open] summary::before { transform: rotate(90deg); }
+.qa-cat-icon { font-size: 18px; }
+.qa-cat-title { flex: 1; font-weight: 600; }
+.qa-cat-count {
+  font-size: 12px; color: var(--text-muted);
+  background: white; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.qa-checklist {
+  padding: 0 14px 12px 14px; margin: 0;
+}
+.qa-checklist li {
+  background: white;
+  border: 1px solid var(--border);
+}
+
+/* agreement + signature in printable brief */
+.agreement-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 20px;
+}
+.signature-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+  margin-top: 30px;
+  page-break-inside: avoid;
+}
+@media (max-width: 600px) { .signature-grid { grid-template-columns: 1fr; } }
+.sig-block { padding-top: 14px; }
+.sig-line {
+  border-bottom: 1px solid var(--text);
+  height: 36px;
+  margin-bottom: 6px;
+}
+.sig-cap { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }

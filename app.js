@@ -142,6 +142,7 @@ function showScreen(name) {
   if (name === "project")  renderProject();
   if (name === "wizard")   renderWizard();
   if (name === "brief")    renderBriefView();
+  if (name === "qa")       renderQA();
   updateProjectCount();
   window.scrollTo({ top: 0, behavior: "instant" });
 }
@@ -218,8 +219,10 @@ function renderProject() {
   nameInput.value = p.name;
   nameInput.oninput = () => renameProject(p.id, nameInput.value);
 
-  document.getElementById("projectMeta").textContent =
-    `Created ${new Date(p.createdAt).toLocaleDateString()} · ${projectShoots(p.id).length} shoot(s)`;
+  const allShoots = projectShoots(p.id);
+  const readyCount = allShoots.filter(s => briefReadiness(s).label === "Ready for production").length;
+  document.getElementById("projectMeta").innerHTML =
+    `Created ${new Date(p.createdAt).toLocaleDateString()} · ${allShoots.length} shoot(s) · <b>${readyCount} ready for production</b>`;
 
   // shoots list
   const list = document.getElementById("shootsList");
@@ -231,9 +234,8 @@ function renderProject() {
     empty.style.display = "none";
     shoots.forEach(s => {
       const pack = XMA_PACKS[s.category];
-      const status = s.submitted
-        ? `<span class="pill pill-ok">Submitted</span>`
-        : `<span class="pill pill-warn">In progress</span>`;
+      const r = briefReadiness(s);
+      const status = `<span class="pill ${r.className}">${r.label}</span>`;
       const card = document.createElement("div");
       card.className = "brief-card";
       card.innerHTML = `
@@ -247,11 +249,13 @@ function renderProject() {
         <div style="margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;">
           <button class="btn btn-ghost btn-sm" data-action="view">View / print</button>
           ${s.submitted ? "" : `<button class="btn btn-ghost btn-sm" data-action="resume">Resume</button>`}
+          <button class="btn btn-ghost btn-sm" data-action="qa">Review videos</button>
           <button class="btn btn-ghost btn-sm" data-action="download">Download</button>
           <button class="btn btn-ghost btn-sm" data-action="delete">Delete</button>
         </div>
       `;
       card.querySelector('[data-action="view"]').addEventListener("click", () => openBriefView(s.id));
+      card.querySelector('[data-action="qa"]').addEventListener("click", () => openQA(s.id));
       const resumeBtn = card.querySelector('[data-action="resume"]');
       if (resumeBtn) resumeBtn.addEventListener("click", () => {
         state.current = s;
@@ -410,6 +414,8 @@ function renderFieldSection(ctx, section) {
   section.fields.forEach(f => target.appendChild(renderField(f, data)));
 }
 
+const OTHER = "Other (specify)";
+
 function renderField(f, dataObj) {
   const wrap = document.createElement("div");
   wrap.className = "field";
@@ -430,12 +436,32 @@ function renderField(f, dataObj) {
     if (f.placeholder) input.placeholder = f.placeholder;
     input.value = dataObj[f.key] ?? "";
     input.addEventListener("input", () => { dataObj[f.key] = input.value; save(); });
+    wrap.appendChild(input);
   }
   else if (f.type === "select") {
     input = document.createElement("select");
+    const opts = [...f.options, OTHER];
     input.innerHTML = `<option value="">— pick one —</option>` +
-      f.options.map(o => `<option ${dataObj[f.key] === o ? "selected" : ""}>${escapeHtml(o)}</option>`).join("");
-    input.addEventListener("change", () => { dataObj[f.key] = input.value; save(); });
+      opts.map(o => `<option ${dataObj[f.key] === o ? "selected" : ""}>${escapeHtml(o)}</option>`).join("");
+    wrap.appendChild(input);
+
+    // free-text input for "Other"
+    const otherKey = f.key + "_other";
+    const otherInput = document.createElement("input");
+    otherInput.type = "text";
+    otherInput.className = "field-other";
+    otherInput.placeholder = "Type your own value…";
+    otherInput.value = dataObj[otherKey] ?? "";
+    otherInput.style.display = dataObj[f.key] === OTHER ? "block" : "none";
+    otherInput.addEventListener("input", () => { dataObj[otherKey] = otherInput.value; save(); });
+    wrap.appendChild(otherInput);
+
+    input.addEventListener("change", () => {
+      dataObj[f.key] = input.value;
+      otherInput.style.display = input.value === OTHER ? "block" : "none";
+      if (input.value !== OTHER) { delete dataObj[otherKey]; otherInput.value = ""; }
+      save();
+    });
   }
   else if (f.type === "multi") {
     input = document.createElement("div");
@@ -456,6 +482,17 @@ function renderField(f, dataObj) {
       });
       input.appendChild(chip);
     });
+    wrap.appendChild(input);
+
+    // Free-text additional values for multi (comma-separated)
+    const otherKey = f.key + "_other";
+    const otherInput = document.createElement("input");
+    otherInput.type = "text";
+    otherInput.className = "field-other";
+    otherInput.placeholder = "Add your own (comma-separated)…";
+    otherInput.value = dataObj[otherKey] ?? "";
+    otherInput.addEventListener("input", () => { dataObj[otherKey] = otherInput.value; save(); });
+    wrap.appendChild(otherInput);
   }
   else { // text, number, date, email
     input = document.createElement("input");
@@ -467,8 +504,8 @@ function renderField(f, dataObj) {
       dataObj[f.key] = f.type === "number" ? (input.value === "" ? "" : Number(input.value)) : input.value;
       save();
     });
+    wrap.appendChild(input);
   }
-  wrap.appendChild(input);
 
   if (f.help) {
     const help = document.createElement("div");
@@ -478,6 +515,18 @@ function renderField(f, dataObj) {
   }
 
   return wrap;
+}
+
+// Resolve a field's display value (handles Other and arrays)
+function resolveFieldDisplay(dataObj, key, value) {
+  if (Array.isArray(value)) {
+    const extra = dataObj?.[key + "_other"];
+    return [...value, ...(extra ? [extra] : [])].join(", ");
+  }
+  if (value === OTHER) {
+    return dataObj?.[key + "_other"] || "(other — not specified)";
+  }
+  return String(value ?? "");
 }
 
 // ---------- VALIDATION ----------
@@ -938,6 +987,21 @@ document.getElementById("emailBriefBtn").addEventListener("click", () => {
   window.location.href = `mailto:hello@xma.agency?subject=${subj}&body=${body}`;
 });
 
+// A shoot is "Ready for production" only if it was submitted AND every preflight
+// item (universal + pack-specific) is ticked. Otherwise we surface "Brief incomplete"
+// so nothing moves to production with missing critical info.
+function briefReadiness(b) {
+  if (!b) return { label: "—", className: "pill-muted" };
+  if (!b.submitted) return { label: "In progress", className: "pill-warn" };
+  const preflight = b.data?.preflight || {};
+  const pack = XMA_PACKS[b.category];
+  const universalCount = 7; // see UNIVERSAL_PREFLIGHT
+  const expected = universalCount + (pack?.preflightExtras?.length || 0);
+  const ticked = Object.values(preflight).filter(Boolean).length;
+  if (ticked >= expected) return { label: "Ready for production", className: "pill-ok" };
+  return { label: `Brief incomplete (${ticked}/${expected})`, className: "pill-bad" };
+}
+
 function findResumeStep(b) {
   for (let i = 0; i < WIZARD_STEPS.length; i++) {
     const step = WIZARD_STEPS[i];
@@ -1004,12 +1068,13 @@ function renderBriefView() {
 
   const idn = d.identity || {};
   const kvBlock = (obj, section) => {
-    if (!section || !section.fields) return Object.entries(obj || {}).filter(([k,v]) => v != null && v !== "" && !k.startsWith("_")).map(([k,v]) =>
-      `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(formatVal(v))}</div></div>`).join("");
+    if (!section || !section.fields) return Object.entries(obj || {}).filter(([k,v]) => v != null && v !== "" && !k.startsWith("_") && !k.endsWith("_other")).map(([k,v]) =>
+      `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(resolveFieldDisplay(obj, k, v))}</div></div>`).join("");
     return section.fields.map(f => {
       const v = obj?.[f.key];
-      if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return "";
-      return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(formatVal(v))}</div></div>`;
+      const extra = obj?.[f.key + "_other"];
+      if ((v == null || v === "" || (Array.isArray(v) && v.length === 0)) && !extra) return "";
+      return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(resolveFieldDisplay(obj, f.key, v))}</div></div>`;
     }).join("");
   };
 
@@ -1024,8 +1089,9 @@ function renderBriefView() {
       const desc = m.description ? `<div class="video-summary-desc">${escapeHtml(m.description)}</div>` : "";
       const rows = sectionConfig.fields.map(f => {
         const v = vid?.[f.key];
-        if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return "";
-        return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(formatVal(v))}</div></div>`;
+        const extra = vid?.[f.key + "_other"];
+        if ((v == null || v === "" || (Array.isArray(v) && v.length === 0)) && !extra) return "";
+        return `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${escapeHtml(resolveFieldDisplay(vid, f.key, v))}</div></div>`;
       }).join("");
       const extras = extraRows ? extraRows(vid) : "";
       return `<div class="video-summary">
@@ -1037,11 +1103,13 @@ function renderBriefView() {
   };
 
   const projName = getProject(b.projectId)?.name || "(no project)";
+  const r = briefReadiness(b);
   let html = `
     <h1>${pack.icon} ${escapeHtml(idn.businessName || "Untitled")} — ${escapeHtml(pack.label)} Shoot Brief</h1>
     <div class="brief-meta">
       Project: <b>${escapeHtml(projName)}</b> · Brief ID: ${b.id} ·
-      Status: ${b.submitted ? "Submitted " + new Date(b.submittedAt).toLocaleString() : "In progress"} ·
+      <span class="pill ${r.className}">${r.label}</span> ·
+      ${b.submitted ? "Submitted " + new Date(b.submittedAt).toLocaleString() : "In progress"} ·
       ${idn.videoCount || "?"} videos · Tier: ${escapeHtml(idn.tier || "—")} · Deadline: ${escapeHtml(idn.deadline || "—")}
     </div>
 
@@ -1089,6 +1157,36 @@ function renderBriefView() {
   html += `
     <h2>Common faults this brief pre-empts</h2>
     <ul>${pack.faultsToAvoid.map(f => `<li style="margin: 4px 0; font-size: 13px;">${escapeHtml(f)}</li>`).join("")}</ul>
+
+    <h2>Agreement &amp; signature</h2>
+    <div class="agreement-box">
+      <p style="margin: 0 0 10px;">
+        This brief is the <b>working agreement</b> between the client and XMA Agency. Every decision recorded
+        above has been reviewed and approved by the client. The team will produce videos that match this brief.
+      </p>
+      <p style="margin: 0 0 10px;">
+        Any change requested by the client after sign-off — adding videos, switching products, changing models,
+        rewriting hooks, swapping platforms — counts as <b>new scope</b> and may incur additional fees or extend
+        the timeline. Revisions inside the agreed rounds remain free; out-of-scope changes are quoted separately.
+      </p>
+      <p style="margin: 0;">
+        Approver named on this brief is the single point of sign-off. Confirmations from any other person on the
+        client side will not be treated as approval.
+      </p>
+    </div>
+
+    <div class="signature-grid">
+      <div class="sig-block">
+        <div class="sig-line"></div>
+        <div class="sig-cap">Client approver — name &amp; signature</div>
+        <div class="sig-cap">Date: __________________</div>
+      </div>
+      <div class="sig-block">
+        <div class="sig-line"></div>
+        <div class="sig-cap">XMA account manager — name &amp; signature</div>
+        <div class="sig-cap">Date: __________________</div>
+      </div>
+    </div>
   `;
 
   content.innerHTML = html;
@@ -1104,6 +1202,191 @@ document.getElementById("briefDownload").addEventListener("click", () => {
   const b = state.briefs.find(x => x.id === viewingBriefId) || state.current;
   if (b) downloadBriefJson(b);
 });
+
+// ---------- CREATOR REVIEW CHECKLIST (QA) ----------
+// What the creator team checks before delivering a video to the client.
+// Each watch focuses on ONE category — the "gorilla effect" means if you split
+// your attention across everything at once, you'll miss the obvious.
+
+const QA_CATEGORIES = [
+  { title: "Pronunciation & audio quality", icon: "🎤", items: [
+    "Product name pronounced correctly",
+    "Accent / tone consistent through the scene",
+    "Key terms & ingredients pronounced correctly",
+    "No robotic / glitchy / metallic voice artifacts",
+    "No mispronounced or swallowed words",
+    "Pacing natural — not too fast / slow, correct pauses",
+    "Volume consistent — not clipping, not too low",
+    "Background music / SFX at the right level",
+    "No abrupt audio cuts or pops",
+  ]},
+  { title: "Lip sync", icon: "👄", items: [
+    "No delay between lips and sound",
+    "Mouth shape matches the sound being made",
+    "Lip sync stays clean through the FULL scene (not just the start)",
+  ]},
+  { title: "Model & body movement", icon: "🧍‍♀️", items: [
+    "Body movement looks natural",
+    "Hands correct — no melting, warping, morphing, or limp fingers",
+    "Face same person throughout (identity consistency)",
+    "Facial expression matches the scene & mood",
+    "Eye direction / gaze makes sense",
+    "Posture / gait believable",
+  ]},
+  { title: "Product handling", icon: "🤲", items: [
+    "Hand wraps the product correctly",
+    "Product doesn't float, teleport, or detach from the hand",
+    "Product orientation stays consistent while held",
+    "Handoffs between hands look believable",
+    "Product physics — weight, tilt, motion — believable",
+  ]},
+  { title: "Product consistency", icon: "💎", items: [
+    "Product size & shape consistent across cuts",
+    "Product writing / brand logo legible & correct (not warped)",
+    "Color (metal / shade / liquid) matches the reference",
+    "Packaging matches the real-life packaging supplied",
+    "No SKU mix-up — featured item is the one in the brief",
+  ]},
+  { title: "Scene & continuity", icon: "🎬", items: [
+    "Setting matches the brief (location, palette, lighting mood)",
+    "No continuity errors between cuts",
+    "Aspect ratio is what was promised in the brief",
+    "Duration is within the promised length",
+    "On-screen text (headline, CTA, price) matches the brief exactly",
+  ]},
+];
+
+let qaShootId = null;
+
+function openQA(shootId) {
+  qaShootId = shootId;
+  showScreen("qa");
+}
+
+function renderQA() {
+  const shoot = state.briefs.find(b => b.id === qaShootId);
+  if (!shoot) { showScreen("projects"); return; }
+  const project = getProject(shoot.projectId);
+  const pack = XMA_PACKS[shoot.category];
+
+  document.getElementById("qaTitle").textContent = `Creator review — ${shoot.data?.identity?.businessName || pack?.label || "Shoot"}`;
+  document.getElementById("qaSubtitle").textContent =
+    `${project?.name || "Project"} · ${pack?.label || ""} · ${(shoot.data?.videos || []).length} video(s)`;
+
+  // ensure QA data structure exists per video
+  shoot.qa = shoot.qa || { videos: [] };
+  const videos = shoot.data?.videos || [];
+  while (shoot.qa.videos.length < videos.length) shoot.qa.videos.push({ checks: {}, notes: "", status: "Pending review" });
+  while (shoot.qa.videos.length > videos.length && shoot.qa.videos.length > 1) shoot.qa.videos.pop();
+
+  const root = document.getElementById("qaContainer");
+  root.innerHTML = "";
+
+  if (videos.length === 0) {
+    root.innerHTML = `<div class="empty">No videos in this shoot. Add videos in the wizard first.</div>`;
+    return;
+  }
+
+  videos.forEach((vid, vi) => {
+    const meta = videos[vi];
+    const qaVid = shoot.qa.videos[vi];
+    const block = document.createElement("div");
+    block.className = "qa-video-block";
+    block.innerHTML = `
+      <div class="qa-vid-head">
+        <h2>${vi + 1}. ${escapeHtml(meta.title || `Video ${vi + 1}`)}</h2>
+        <div class="qa-status-wrap">
+          <select class="qa-status">
+            <option ${qaVid.status === "Pending review" ? "selected" : ""}>Pending review</option>
+            <option ${qaVid.status === "Approved" ? "selected" : ""}>Approved</option>
+            <option ${qaVid.status === "Needs rework" ? "selected" : ""}>Needs rework</option>
+          </select>
+        </div>
+      </div>
+      ${meta.description ? `<p class="muted" style="margin-bottom: 16px;">${escapeHtml(meta.description)}</p>` : ""}
+      <div class="qa-progress muted" id="qaProgress_${vi}"></div>
+      <div class="qa-categories" id="qaCats_${vi}"></div>
+      <div class="field" style="margin-top: 14px;">
+        <label class="field-label">Notes / issues to flag</label>
+        <textarea class="qa-notes" rows="3" placeholder="What needs to be fixed before delivery?">${escapeHtml(qaVid.notes || "")}</textarea>
+      </div>
+    `;
+
+    const cats = block.querySelector(`#qaCats_${vi}`);
+    QA_CATEGORIES.forEach((cat, ci) => {
+      const cTotal = cat.items.length;
+      const cDone  = cat.items.filter(it => qaVid.checks[`${ci}_${it}`]).length;
+      const det = document.createElement("details");
+      det.className = "qa-category";
+      det.open = cDone < cTotal; // open if incomplete
+      det.innerHTML = `
+        <summary>
+          <span class="qa-cat-icon">${cat.icon}</span>
+          <span class="qa-cat-title">${escapeHtml(cat.title)}</span>
+          <span class="qa-cat-count">${cDone} / ${cTotal}</span>
+        </summary>
+        <ul class="checklist qa-checklist">
+          ${cat.items.map(it => {
+            const key = `${ci}_${it}`;
+            const checked = !!qaVid.checks[key];
+            return `<li>
+              <input type="checkbox" id="qa_${vi}_${ci}_${escapeAttr(it).replace(/\s/g, "_")}" ${checked ? "checked" : ""} data-key="${escapeAttr(key)}"/>
+              <label for="qa_${vi}_${ci}_${escapeAttr(it).replace(/\s/g, "_")}">${escapeHtml(it)}</label>
+            </li>`;
+          }).join("")}
+        </ul>
+      `;
+      det.querySelectorAll("input[type=checkbox]").forEach(cb => {
+        cb.addEventListener("change", () => {
+          qaVid.checks[cb.dataset.key] = cb.checked;
+          save();
+          updateQaCounts(block, vi, qaVid);
+        });
+      });
+      cats.appendChild(det);
+    });
+
+    block.querySelector(".qa-status").addEventListener("change", e => { qaVid.status = e.target.value; save(); paintStatus(block, qaVid.status); });
+    block.querySelector(".qa-notes").addEventListener("input", e => { qaVid.notes = e.target.value; save(); });
+
+    paintStatus(block, qaVid.status);
+    root.appendChild(block);
+    updateQaCounts(block, vi, qaVid);
+  });
+}
+
+function updateQaCounts(block, vi, qaVid) {
+  // update per-category counts
+  QA_CATEGORIES.forEach((cat, ci) => {
+    const cTotal = cat.items.length;
+    const cDone  = cat.items.filter(it => qaVid.checks[`${ci}_${it}`]).length;
+    const counts = block.querySelectorAll(".qa-cat-count");
+    if (counts[ci]) counts[ci].textContent = `${cDone} / ${cTotal}`;
+  });
+  // overall progress
+  const totalItems = QA_CATEGORIES.reduce((acc, c) => acc + c.items.length, 0);
+  const totalDone = Object.values(qaVid.checks).filter(Boolean).length;
+  const el = block.querySelector(`#qaProgress_${vi}`);
+  if (el) el.textContent = `${totalDone} / ${totalItems} checks complete`;
+}
+
+function paintStatus(block, status) {
+  const sel = block.querySelector(".qa-status");
+  sel.style.background = status === "Approved" ? "#d1fae5"
+                       : status === "Needs rework" ? "#fee2e2"
+                       : "#fef3c7";
+  sel.style.color = status === "Approved" ? "#065f46"
+                  : status === "Needs rework" ? "#991b1b"
+                  : "#92400e";
+  sel.style.fontWeight = "600";
+}
+
+document.getElementById("qaBack").addEventListener("click", () => {
+  const s = state.briefs.find(b => b.id === qaShootId);
+  if (s?.projectId) { state.activeProjectId = s.projectId; showScreen("project"); }
+  else showScreen("projects");
+});
+document.getElementById("qaPrintBtn").addEventListener("click", () => window.print());
 
 // ---------- DOWNLOAD HELPER ----------
 function downloadBriefJson(b) {
